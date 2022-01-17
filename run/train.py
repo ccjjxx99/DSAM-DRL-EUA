@@ -3,12 +3,12 @@ import time
 import torch
 from torch.optim import Adam
 from torch.utils.data import DataLoader
-from util.eua_dataset import EuaTrainDataset
+from data.eua_dataset import EuaTrainDataset
 from nets.attention_net import PointerNet
 from util.utils import log_and_print
 
 if __name__ == '__main__':
-    batch_size = 1024
+    batch_size = 64
     no_cuda = False
     use_cuda = not no_cuda and torch.cuda.is_available()
     device = torch.device("cuda:0" if use_cuda else "cpu")
@@ -17,7 +17,7 @@ if __name__ == '__main__':
     max_grad_norm = 2.
     epochs = 300
     dropout = 0.5
-    server_reward_rate=0.01
+    server_reward_rate = 0.01
 
     user_num = 100
 
@@ -26,7 +26,7 @@ if __name__ == '__main__':
     test_size = 10000
 
     print("正在加载训练数据集")
-    filename = "../data/train_server_22_user_" + str(user_num) + "_" + str(train_size) + ".pkl"
+    filename = "../dataset/train_server_22_user_" + str(user_num) + "_" + str(train_size) + ".pkl"
     try:
         with open(filename, 'rb') as f:
             train_set = pickle.load(f)  # read file and build object
@@ -36,7 +36,7 @@ if __name__ == '__main__':
             pickle.dump(train_set, f)
     print("加载训练数据集完成")
 
-    filename = "../data/valid_server_22_user_" + str(user_num) + "_" + str(valid_size) + ".pkl"
+    filename = "../dataset/valid_server_22_user_" + str(user_num) + "_" + str(valid_size) + ".pkl"
     try:
         with open(filename, 'rb') as f:
             valid_set = pickle.load(f)  # read file and build object
@@ -46,7 +46,7 @@ if __name__ == '__main__':
             pickle.dump(valid_set, f)
     print("加载验证数据集完成")
 
-    filename = "../data/test_server_22_user_" + str(user_num) + "_" + str(test_size) + ".pkl"
+    filename = "../dataset/test_server_22_user_" + str(user_num) + "_" + str(test_size) + ".pkl"
     try:
         with open(filename, 'rb') as f:
             test_set = pickle.load(f)  # read file and build object
