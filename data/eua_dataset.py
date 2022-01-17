@@ -1,6 +1,6 @@
 import torch
 from torch.utils.data import Dataset
-from util.data_generator import DataGenerator
+from data.data_generator import DataGenerator
 
 
 class EuaTrainDataset(Dataset):

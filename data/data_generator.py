@@ -164,7 +164,7 @@ def cal_props(user_seqs, server_seqs, allocated_seq):
 # 获取所有服务器
 def get_all_server_xy():
     server_list = []
-    file = open("../data/site-optus-melbCBD.csv", 'r')
+    file = open("dataset/site-optus-melbCBD.csv", 'r')
     file.readline().strip()  # 数据集的第一行是字段说明信息，不能作为数据，因此跳过
     lines = file.readlines()
     for i in range(len(lines)):
