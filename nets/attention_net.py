@@ -23,13 +23,16 @@ class ServerEncoder(nn.Module):
     def __init__(self, input_dim, hidden_dim, n_heads=8, n_layers=6,
                  normalization='batch', feed_forward_hidden=512, dropout=0.5):
         super(ServerEncoder, self).__init__()
-        self.transformer = GraphAttentionEncoder(n_heads, hidden_dim, n_layers,
-                                                 input_dim, normalization, feed_forward_hidden, dropout=dropout)
+        # self.transformer = GraphAttentionEncoder(n_heads, hidden_dim, n_layers,
+        #                                          input_dim, normalization, feed_forward_hidden, dropout=dropout)
+        self.embedding = nn.Linear(input_dim, hidden_dim)
+        self.dropout = nn.Dropout(dropout)
 
     def forward(self, inputs):
         # h,  # (batch_size, graph_size, embed_dim)
         # h.mean(dim=1)  # average to get embedding of graph, (batch_size, embed_dim)
-        return self.transformer(inputs)
+        # return self.transformer(inputs)
+        return self.dropout(self.embedding(inputs))
 
 
 class Glimpse(nn.Module):

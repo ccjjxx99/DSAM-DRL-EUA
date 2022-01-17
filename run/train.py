@@ -8,50 +8,55 @@ from nets.attention_net import PointerNet
 from util.utils import log_and_print
 
 if __name__ == '__main__':
-    batch_size = 64
+    batch_size = 1024
     no_cuda = False
     use_cuda = not no_cuda and torch.cuda.is_available()
-    device = torch.device("cuda:0" if use_cuda else "cpu")
-    lr = 1e-2
+    lr = 1e-3
     beta = 0.9
     max_grad_norm = 2.
     epochs = 300
     dropout = 0.5
-    server_reward_rate = 0.01
-
+    server_reward_rate = 0.1
     user_num = 100
-
+    resource_rate = 2
+    x_end = 0.4
+    y_end = 0.5
     train_size = 100000
     valid_size = 10000
     test_size = 10000
 
+    device = torch.device("cuda:0" if use_cuda else "cpu")
+
     print("正在加载训练数据集")
-    filename = "../dataset/train_server_22_user_" + str(user_num) + "_" + str(train_size) + ".pkl"
+    filename = "../dataset/train_server_" + str(x_end) + "_" + str(y_end) + "_user_" \
+               + str(user_num) + "_rate_" + str(resource_rate) + "_size_" + str(train_size) + ".pkl"
     try:
         with open(filename, 'rb') as f:
             train_set = pickle.load(f)  # read file and build object
     except FileNotFoundError:
-        train_set = EuaTrainDataset(user_num, train_size, 0, 0.4, 0, 0.5, device)
+        train_set = EuaTrainDataset(user_num, train_size, 0, x_end, 0, y_end, device, rate=resource_rate)
         with open(filename, 'wb') as f:
             pickle.dump(train_set, f)
     print("加载训练数据集完成")
 
-    filename = "../dataset/valid_server_22_user_" + str(user_num) + "_" + str(valid_size) + ".pkl"
+    filename = "../dataset/valid_server_" + str(x_end) + "_" + str(y_end) + "_user_" \
+               + str(user_num) + "_rate_" + str(resource_rate) + "_size_" + str(valid_size) + ".pkl"
     try:
         with open(filename, 'rb') as f:
             valid_set = pickle.load(f)  # read file and build object
     except FileNotFoundError:
-        valid_set = EuaTrainDataset(user_num, valid_size, 0, 0.4, 0, 0.5, device)
+        valid_set = EuaTrainDataset(user_num, valid_size, 0, x_end, 0, y_end, device, rate=resource_rate)
         with open(filename, 'wb') as f:
             pickle.dump(valid_set, f)
     print("加载验证数据集完成")
 
-    filename = "../dataset/test_server_22_user_" + str(user_num) + "_" + str(test_size) + ".pkl"
+    filename = "../dataset/test_server_" + str(x_end) + "_" + str(y_end) + "_user_" \
+               + str(user_num) + "_rate_" + str(resource_rate) + "_size_" + str(test_size) + ".pkl"
     try:
         with open(filename, 'rb') as f:
             test_set = pickle.load(f)  # read file and build object
     except FileNotFoundError:
-        test_set = EuaTrainDataset(user_num, test_size, 0, 0.4, 0, 0.5, device)
+        test_set = EuaTrainDataset(user_num, test_size, 0, x_end, 0, y_end, device, rate=resource_rate)
         with open(filename, 'wb') as f:
             pickle.dump(test_set, f)
     print("加载测试数据集完成")
@@ -64,7 +69,13 @@ if __name__ == '__main__':
     optimizer = Adam(model.parameters(), lr=lr)
 
     critic_exp_mvg_avg = torch.zeros(1, device=device)
-    log_file_name = "../log/rl_log" + time.strftime('%m%d%H%M', time.localtime(time.time())) + '.log'
+    log_file_name = "../log/" + time.strftime('%m%d%H%M', time.localtime(time.time())) \
+                    + "_server_" + str(x_end) + "_" + str(y_end) + "_user_" \
+                    + str(user_num) + "_rate_" + str(resource_rate) + '.log'
+
+    test_reward_list = []
+    test_user_list = []
+    test_server_list = []
     for epoch in range(epochs):
         # Train
         model.train()
@@ -143,22 +154,64 @@ if __name__ == '__main__':
             R_list = torch.cat(R_list)
             user_allocated_props_list = torch.cat(user_allocated_props_list)
             server_used_props_list = torch.cat(server_used_props_list)
+            r = torch.mean(R_list)
+            user_allo = torch.mean(user_allocated_props_list)
+            server_use = torch.mean(server_used_props_list)
             log_and_print('{} Epoch {}: Test \tR:{:.6f}\tuser_props: {:.6f}\tserver_props: {:.6f}'
                           .format(time.strftime('%H:%M:%S', time.localtime(time.time())),
-                                  epoch, torch.mean(R_list),
-                                  torch.mean(user_allocated_props_list),
-                                  torch.mean(server_used_props_list)),
+                                  epoch, r, user_allo, server_use),
                           log_file_name)
             log_and_print('', log_file_name)
 
+            test_reward_list.append(r)
+            test_user_list.append(user_allo)
+            test_server_list.append(server_use)
+            if len(test_reward_list) == 1:
+                best_r = r
+                best_user = user_allo
+                best_server = server_use
+                best_time = 0
+            else:
+                if r < best_r:
+                    best_r = r
+                    best_user = user_allo
+                    best_server = server_use
+                    best_time = 0
+                else:
+                    best_time += 1
+
             # 每10个epoch保存一次模型：
             if epoch % 10 == 9:
-                model_filename = "../model/model_RL_{}_props_{:.6f}.mdl" \
-                    .format(time.strftime('%m%d%H%M', time.localtime(time.time())), torch.mean(R_list))
-                torch.save(model, model_filename)
+                model_filename = "../model/" + time.strftime('%m%d%H%M', time.localtime(time.time())) \
+                                 + "_server_" + str(x_end) + "_" + str(y_end) + "_user_" \
+                                 + str(user_num) + "_rate_" + str(resource_rate) + '.mdl'
+                state = {'model': model.state_dict(), 'optimizer': optimizer.state_dict(), 'epoch': epoch}
+                torch.save(state, model_filename)
                 log_and_print("模型已存储到: {}".format(model_filename), log_file_name)
+                # 加载方法
+                # checkpoint = torch.load(path)
+                # model.load_state_dict(checkpoint['model'])
+                # optimizer.load_state_dict(checkpoint['optimizer'])
+                # epoch = checkpoint(['epoch'])
 
             torch.cuda.empty_cache()
+
+            # 如果超过10个epoch奖励都没有再提升，就停止训练
+            if best_time >= 10:
+                log_and_print("训练结束，最好的reward:{}，用户分配率:{}，服务器租用率:{}"
+                              .format(best_r, best_user, best_server), log_file_name)
+                log_and_print("效果如下：", log_file_name)
+                for i in range(len(test_reward_list)):
+                    log_and_print("Epoch: {}\treward: {}\tuser_props: {}\tserver_props: {}"
+                                  .format(i, test_reward_list[i], test_user_list[i], test_server_list[i]),
+                                  log_file_name)
+                model_filename = "../model/" + time.strftime('%m%d%H%M', time.localtime(time.time())) \
+                                 + "_server_" + str(x_end) + "_" + str(y_end) + "_user_" \
+                                 + str(user_num) + "_rate_" + str(resource_rate) + '.mdl'
+                state = {'model': model.state_dict(), 'optimizer': optimizer.state_dict(), 'epoch': epoch}
+                torch.save(state, model_filename)
+                log_and_print("模型已存储到: {}".format(model_filename), log_file_name)
+                exit()
 
             # if epoch % 20 == 19:
             #     lr = lr / 10
