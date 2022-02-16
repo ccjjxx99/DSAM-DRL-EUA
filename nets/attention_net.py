@@ -96,7 +96,7 @@ class PointerNet(nn.Module):
         self.device = device
 
         self.user_encoder = UserEncoder(user_input_dim, hidden_dim, dropout=dropout).to(device)
-        self.server_encoder = ServerEncoder(server_input_dim, hidden_dim, dropout=dropout).to(device)
+        self.server_encoder = ServerEncoder(server_input_dim + 1, hidden_dim, dropout=dropout).to(device)
 
         # glimpse输入（用户，上次选择的服务器），维度为2*dim， 跟所有的服务器作相似度并输出融合后的服务器
         self.glimpse = Glimpse(hidden_dim, hidden_dim, dropout=dropout).to(device)
@@ -109,22 +109,26 @@ class PointerNet(nn.Module):
         user_len = user_input_seq.size(1)
         server_len = server_input_seq.size(1)
 
+        # 真实分配情况
+        user_allocate_list = -torch.ones(batch_size, user_len, dtype=torch.long, device=self.device)
+        # 服务器分配矩阵，加一是为了给index为-1的来赋值
+        server_allocate_mat = torch.zeros(batch_size, server_len + 1, dtype=torch.float, device=self.device)
+
+        # 给服务器添加一个是否active位
+        server_seq = torch.cat((server_input_seq, server_allocate_mat[:, :-1].unsqueeze(-1)), dim=-1)
+
         # encoder_output => (batch_size, max_seq_len, hidden_size) if batch_first
         # hidden_size is usually set same as embedding size
         # encoder_hidden => (num_layers * num_directions, batch_size, hidden_size) for each of h_n and c_n
         user_encoder_outputs = self.user_encoder(user_input_seq)
-        server_encoder_outputs = self.server_encoder(server_input_seq)
+        server_encoder_outputs = self.server_encoder(server_seq)
 
         # last_chosen_server = torch.zeros(batch_size, 1, self.hidden_dim, device=self.device)
         probs = []
         action_idx = []
 
         # (batch_size, server_len 20, server_dim 4)
-        tmp_server_capacity = server_input_seq[:, :, 3:].clone()
-        # 真实分配情况
-        user_allocate_list = -torch.ones(batch_size, user_len, dtype=torch.long, device=self.device)
-        # 服务器分配矩阵，加一是为了给index为-1的来赋值
-        server_allocate_mat = torch.zeros(batch_size, server_len + 1, dtype=torch.bool, device=self.device)
+        tmp_server_capacity = server_seq[:, :, 3:7].clone()
 
         for i in range(user_len):
             mask = masks[:, i]
@@ -161,9 +165,11 @@ class PointerNet(nn.Module):
             # 真实分配情况
             user_allocate_list[:, i] = server_id
             # 给分配了的服务器在服务器分配矩阵中赋值为True
-            server_allocate_mat[batch_range, server_id] = True
+            server_allocate_mat[batch_range, server_id] = 1
 
-            server_now = torch.cat((server_input_seq[:, :, :3], tmp_server_capacity), dim=-1)
+            server_now = torch.cat((server_seq[:, :, :3], tmp_server_capacity,
+                                    server_allocate_mat[:, :-1].unsqueeze(-1)),
+                                   dim=-1)
             server_encoder_outputs = self.server_encoder(server_now)
 
             # index_tensor = idx.unsqueeze(-1).unsqueeze(-1).expand(batch_size, 1, self.hidden_dim)
