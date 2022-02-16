@@ -122,6 +122,7 @@ if __name__ == '__main__':
 
         # Valid
         model.eval()
+        log_and_print()
         with torch.no_grad():
             for batch_idx, (server_seq, user_seq, masks) in enumerate(valid_loader):
                 server_seq, user_seq, masks = server_seq.to(device), user_seq.to(device), masks.to(device)
