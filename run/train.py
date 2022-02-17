@@ -8,14 +8,14 @@ from util.utils import log_and_print
 from data.eua_dataset import generate_three_set
 
 if __name__ == '__main__':
-    batch_size = 1024
+    batch_size = 2048
     no_cuda = False
     use_cuda = not no_cuda and torch.cuda.is_available()
-    lr = 1e-3
+    lr = 1e-4
     beta = 0.9
     max_grad_norm = 2.
-    epochs = 300
-    dropout = 0.5
+    epochs = 1000
+    dropout = 0.1
     server_reward_rate = 0.1
     user_num = 100
     resource_rate = 1.5
@@ -24,7 +24,6 @@ if __name__ == '__main__':
     train_size = 100000
     valid_size = 10000
     test_size = 10000
-
     device = torch.device("cuda:0" if use_cuda else "cpu")
 
     train_filename = "D:/transformer_eua/dataset/train_server_" + str(x_end) + "_" + str(y_end) + "_user_" \
@@ -122,7 +121,7 @@ if __name__ == '__main__':
 
         # Valid
         model.eval()
-        log_and_print()
+        log_and_print('', log_file_name)
         with torch.no_grad():
             for batch_idx, (server_seq, user_seq, masks) in enumerate(valid_loader):
                 server_seq, user_seq, masks = server_seq.to(device), user_seq.to(device), masks.to(device)
@@ -209,7 +208,8 @@ if __name__ == '__main__':
                                   log_file_name)
                 model_filename = "../model/" + time.strftime('%m%d%H%M', time.localtime(time.time())) \
                                  + "_server_" + str(x_end) + "_" + str(y_end) + "_user_" \
-                                 + str(user_num) + "_rate_" + str(resource_rate) + '.mdl'
+                                 + str(user_num) + "_rate_" + str(resource_rate) + "_" \
+                                 + "%.2f" % (best_user * 100) + "_" + "%.2f" % (best_server * 100) + '.mdl'
                 state = {'model': model.state_dict(), 'optimizer': optimizer.state_dict(), 'epoch': epoch}
                 torch.save(state, model_filename)
                 log_and_print("模型已存储到: {}".format(model_filename), log_file_name)
