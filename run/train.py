@@ -186,8 +186,8 @@ if __name__ == '__main__':
                 else:
                     best_time += 1
 
-            # 每10个epoch保存一次模型：
-            if epoch % 10 == 9:
+            # 每20个epoch保存一次模型：
+            if epoch % 20 == 19:
                 model_filename = "../model/" + time.strftime('%m%d%H%M', time.localtime(time.time())) \
                                  + "_server_" + str(x_end) + "_" + str(y_end) + "_user_" \
                                  + str(user_num) + "_rate_" + str(resource_rate) + '.mdl'

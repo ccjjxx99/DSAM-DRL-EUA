@@ -184,7 +184,7 @@ class PointerNet(nn.Module):
                                    dim=-1)
             server_encoder_outputs = self.server_encoder(server_now)
 
-        action_probs = torch.stack(action_probs, dim=-1)
+        action_probs = torch.stack(action_probs)
         action_idx = torch.stack(action_idx, dim=-1)
 
         # 目前user_allocate_list是(batch_size, user_len)
