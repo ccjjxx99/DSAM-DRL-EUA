@@ -22,6 +22,7 @@ def EUA_MCF(servers, original_users, user_within_servers):
         user_allocate_list[allocated_user_id] = allocated_server_id
         fake_allocate_list[allocated_user_id] = allocated_server_id
         server_allocate_num[allocated_server_id] += 1
+        activated_servers.append(allocated_server_id)
 
     # 复制一份server，防止改变工作负载源数据
     servers = copy.deepcopy(servers)
@@ -34,7 +35,7 @@ def EUA_MCF(servers, original_users, user_within_servers):
         this_user_s_active_server = []
         other_servers = []
         for server_id in user_within_servers[user_id]:
-            if activated_servers.__contains__(server_id):
+            if server_id in activated_servers:
                 this_user_s_active_server.append(server_id)
             else:
                 other_servers.append(server_id)
