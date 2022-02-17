@@ -3,7 +3,7 @@ import copy
 
 def log_and_print(log_str, log_filename):
     print(log_str)
-    with open(log_filename, "a+") as ff:
+    with open(log_filename, "a+", encoding='utf8') as ff:
         ff.write(log_str + '\n')
 
 

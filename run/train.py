@@ -1,8 +1,11 @@
+import os
 import pickle
 import time
 import torch
 from torch.optim import Adam
 from torch.utils.data import DataLoader
+from torch.utils.tensorboard import SummaryWriter
+
 from nets.attention_net import PointerNet
 from util.utils import log_and_print
 from data.eua_dataset import generate_three_set
@@ -18,7 +21,7 @@ if __name__ == '__main__':
     dropout = 0.1
     server_reward_rate = 0.1
     user_num = 100
-    resource_rate = 1.5
+    resource_rate = 3
     x_end = 0.4
     y_end = 0.5
     train_size = 100000
@@ -66,9 +69,14 @@ if __name__ == '__main__':
     optimizer = Adam(model.parameters(), lr=lr)
 
     critic_exp_mvg_avg = torch.zeros(1, device=device)
-    log_file_name = "../log/" + time.strftime('%m%d%H%M', time.localtime(time.time())) \
-                    + "_server_" + str(x_end) + "_" + str(y_end) + "_user_" \
-                    + str(user_num) + "_rate_" + str(resource_rate) + '.log'
+
+    board_dir_name = "../log/" + time.strftime('%m%d%H%M', time.localtime(time.time())) \
+                     + "_server_" + str(x_end) + "_" + str(y_end) + "_user_" \
+                     + str(user_num) + "_rate_" + str(resource_rate)
+    log_file_name = board_dir_name + '/log.log'
+
+    os.makedirs(board_dir_name, exist_ok=True)
+    tensorboard_writer = SummaryWriter(board_dir_name)
 
     test_reward_list = []
     test_user_list = []
@@ -120,6 +128,10 @@ if __name__ == '__main__':
                     torch.mean(server_used_props)),
                 log_file_name)
 
+        tensorboard_writer.add_scalar('train_reward', torch.mean(reward), epoch)
+        tensorboard_writer.add_scalar('train_user_allocated_props', torch.mean(user_allocated_props), epoch)
+        tensorboard_writer.add_scalar('train_server_used_props', torch.mean(server_used_props), epoch)
+
         # Valid
         model.eval()
         log_and_print('', log_file_name)
@@ -167,6 +179,10 @@ if __name__ == '__main__':
                 time.strftime('%H:%M:%S', time.localtime(time.time())), epoch, r, user_allo, server_use),
                 log_file_name)
             log_and_print('', log_file_name)
+
+            tensorboard_writer.add_scalar('test_reward', r, epoch)
+            tensorboard_writer.add_scalar('test_user_allocated_props', user_allo, epoch)
+            tensorboard_writer.add_scalar('test_server_used_props', server_use, epoch)
 
             test_reward_list.append(r)
             test_user_list.append(user_allo)
