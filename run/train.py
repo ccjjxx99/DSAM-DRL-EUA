@@ -76,6 +76,7 @@ if __name__ == '__main__':
     for epoch in range(epochs):
         # Train
         model.train()
+        model.policy = 'sample'
         for batch_idx, (server_seq, user_seq, masks) in enumerate(train_loader):
             server_seq, user_seq, masks = server_seq.to(device), user_seq.to(device), masks.to(device)
 
@@ -145,6 +146,7 @@ if __name__ == '__main__':
             R_list = []
             user_allocated_props_list = []
             server_used_props_list = []
+            model.policy = 'greedy'
             for batch_idx, (server_seq, user_seq, masks) in enumerate(test_loader):
                 server_seq, user_seq, masks = server_seq.to(device), user_seq.to(device), masks.to(device)
 
@@ -173,6 +175,7 @@ if __name__ == '__main__':
                 best_r = r
                 best_user = user_allo
                 best_server = server_use
+                best_state = {'model': model.state_dict(), 'optimizer': optimizer.state_dict(), 'epoch': epoch}
                 best_time = 0
             else:
                 if r < best_r:
@@ -210,8 +213,7 @@ if __name__ == '__main__':
                                  + "_server_" + str(x_end) + "_" + str(y_end) + "_user_" \
                                  + str(user_num) + "_rate_" + str(resource_rate) + "_" \
                                  + "%.2f" % (best_user * 100) + "_" + "%.2f" % (best_server * 100) + '.mdl'
-                state = {'model': model.state_dict(), 'optimizer': optimizer.state_dict(), 'epoch': epoch}
-                torch.save(state, model_filename)
+                torch.save(best_state, model_filename)
                 log_and_print("模型已存储到: {}".format(model_filename), log_file_name)
                 log_and_print("训练结束，最好的reward:{}，用户分配率:{}，服务器租用率:{}"
                               .format(best_r, best_user, best_server), log_file_name)

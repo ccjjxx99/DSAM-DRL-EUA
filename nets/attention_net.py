@@ -89,7 +89,8 @@ class Attention(nn.Module):
 
 
 class PointerNet(nn.Module):
-    def __init__(self, user_input_dim, server_input_dim, hidden_dim, device, dropout=0.5, server_reward_rate=0.1):
+    def __init__(self, user_input_dim, server_input_dim, hidden_dim, device, dropout=0.1, server_reward_rate=0.1,
+                 policy='sample'):
         super(PointerNet, self).__init__()
         # decoder hidden size
         self.hidden_dim = hidden_dim
@@ -103,6 +104,7 @@ class PointerNet(nn.Module):
         self.pointer = Attention(hidden_dim, dropout=dropout).to(device)
         self.sm = nn.Softmax(dim=1).to(device)
         self.server_reward_rate = server_reward_rate
+        self.policy = policy
 
     def forward(self, user_input_seq, server_input_seq, masks):
         batch_size = user_input_seq.size(0)
@@ -124,7 +126,7 @@ class PointerNet(nn.Module):
         server_encoder_outputs = self.server_encoder(server_seq)
 
         # last_chosen_server = torch.zeros(batch_size, 1, self.hidden_dim, device=self.device)
-        probs = []
+        action_probs = []
         action_idx = []
 
         # (batch_size, server_len 20, server_dim 4)
@@ -138,13 +140,23 @@ class PointerNet(nn.Module):
             server_glimpse = self.glimpse(user, server_encoder_outputs)
 
             # get a pointer distribution over the encoder outputs using attention
-            # (batch_size, max_seq_len)
+            # (batch_size, server_len)
             logits = self.pointer(server_glimpse, server_encoder_outputs, mask)
-            prob = F.softmax(logits, dim=1)
+            # (batch_size, server_len)
+            probs = F.softmax(logits, dim=1)
 
-            idx = prob.multinomial(num_samples=1).squeeze(1)
+            if self.policy == 'sample':
+                # (batch_size, 1)
+                idx = probs.multinomial(num_samples=1)
+                prob = torch.gather(probs, dim=1, index=idx)
+            elif self.policy == 'greedy':
+                prob, idx = probs.topk(k=1)
+            else:
+                raise NotImplementedError
 
-            probs.append(prob)
+            prob = prob.squeeze(1)
+            idx = idx.squeeze(1)
+            action_probs.append(prob)
             action_idx.append(idx)
 
             # 第j个用户的分配服务器，取值只有0-19
@@ -172,14 +184,7 @@ class PointerNet(nn.Module):
                                    dim=-1)
             server_encoder_outputs = self.server_encoder(server_now)
 
-            # index_tensor = idx.unsqueeze(-1).unsqueeze(-1).expand(batch_size, 1, self.hidden_dim)
-            # last_chosen_server = \
-            #     torch.gather(server_encoder_outputs, dim=1, index=index_tensor)
-
-        actions_probs = []
-        for prob, action_id in zip(probs, action_idx):
-            actions_probs.append(prob[[x for x in range(batch_size)], action_id.data])
-
+        action_probs = torch.stack(action_probs, dim=-1)
         action_idx = torch.stack(action_idx, dim=-1)
 
         # 目前user_allocate_list是(batch_size, user_len)
@@ -192,7 +197,7 @@ class PointerNet(nn.Module):
         server_used_props = server_used_num.float() / server_len
 
         return -(user_allocated_props - server_used_props * self.server_reward_rate),\
-            actions_probs, action_idx, user_allocated_props, server_used_props, user_allocate_list
+            action_probs, action_idx, user_allocated_props, server_used_props, user_allocate_list
 
 
 def can_allocate(workload: torch.Tensor, capacity: torch.Tensor):
