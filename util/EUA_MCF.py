@@ -1,5 +1,7 @@
 import copy
 
+import numpy as np
+
 
 def can_allocate(workload, capacity):
     for i in range(4):
@@ -8,10 +10,10 @@ def can_allocate(workload, capacity):
     return True
 
 
-def EUA_MCF(servers, original_users, user_within_servers):
+def EUA_MCF(original_servers, original_users, user_within_servers):
     users = sorted(original_users, key=lambda u: u[2])
     user_num = len(users)
-    server_num = len(servers)
+    server_num = len(original_servers)
     # 每个用户被分配到的服务器
     user_allocate_list = [-1] * user_num
     fake_allocate_list = [-1] * user_num
@@ -25,7 +27,7 @@ def EUA_MCF(servers, original_users, user_within_servers):
         activated_servers.append(allocated_server_id)
 
     # 复制一份server，防止改变工作负载源数据
-    servers = copy.deepcopy(servers)
+    servers = copy.deepcopy(original_servers)
     activated_servers = []
     # 为每一个用户分配一个服务器
     for user_id in range(user_num):
@@ -82,4 +84,15 @@ def EUA_MCF(servers, original_users, user_within_servers):
     used_server_num = server_num - server_allocate_num.count(0)
     server_used_prop = used_server_num / server_num
 
-    return users, fake_allocate_list, user_allocate_list, server_allocate_num, user_allocated_prop, server_used_prop
+    # 已使用的服务器的资源利用率
+    server_allocate_mat = np.array(server_allocate_num) > 0
+    used_original_server = original_servers[server_allocate_mat]
+    original_servers_capacity = used_original_server[:, 3:]
+    servers_remain = servers[server_allocate_mat]
+    servers_remain_capacity = servers_remain[:, 3:]
+    sum_all_capacity = original_servers_capacity.sum()
+    sum_remain_capacity = servers_remain_capacity.sum()
+    capacity_used_prop = 1 - sum_remain_capacity / sum_all_capacity
+
+    return users, fake_allocate_list, user_allocate_list, server_allocate_num, \
+        user_allocated_prop, server_used_prop, capacity_used_prop

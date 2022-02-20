@@ -1,5 +1,7 @@
 import copy
 
+import numpy as np
+
 
 def log_and_print(log_str, log_filename):
     print(log_str)
@@ -14,9 +16,9 @@ def can_allocate(workload, capacity):
     return True
 
 
-def get_reward(servers, users, actions):
+def get_reward(original_servers, users, actions):
     user_num = len(users)
-    server_num = len(servers)
+    server_num = len(original_servers)
     # 每个用户被分配到的服务器
     user_allocate_list = [-1] * user_num
     fake_allocate_list = [-1] * user_num
@@ -28,7 +30,7 @@ def get_reward(servers, users, actions):
         server_allocate_num[allocated_server_id] += 1
 
     # 复制一份server，防止改变工作负载源数据
-    servers = copy.deepcopy(servers)
+    servers = copy.deepcopy(original_servers)
     # 为每一个用户分配一个服务器
     for user_id in range(user_num):
         user = users[user_id]
@@ -50,4 +52,14 @@ def get_reward(servers, users, actions):
     used_server_num = server_num - server_allocate_num.count(0)
     server_used_prop = used_server_num / server_num
 
-    return user_allocate_list, server_allocate_num, user_allocated_prop, server_used_prop
+    # 已使用的服务器的资源利用率
+    server_allocate_mat = np.array(server_allocate_num) > 0
+    used_original_server = original_servers[server_allocate_mat]
+    original_servers_capacity = used_original_server[:, 3:]
+    servers_remain = servers[server_allocate_mat]
+    servers_remain_capacity = servers_remain[:, 3:]
+    sum_all_capacity = original_servers_capacity.sum()
+    sum_remain_capacity = servers_remain_capacity.sum()
+    capacity_used_prop = 1 - sum_remain_capacity / sum_all_capacity
+
+    return user_allocate_list, server_allocate_num, user_allocated_prop, server_used_prop, capacity_used_prop

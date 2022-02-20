@@ -3,7 +3,7 @@ import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from nets.graph_encoder import GraphAttentionEncoder
+# from nets.graph_encoder import GraphAttentionEncoder
 
 
 class UserEncoder(nn.Module):
@@ -114,7 +114,7 @@ class PointerNet(nn.Module):
         # 真实分配情况
         user_allocate_list = -torch.ones(batch_size, user_len, dtype=torch.long, device=self.device)
         # 服务器分配矩阵，加一是为了给index为-1的来赋值
-        server_allocate_mat = torch.zeros(batch_size, server_len + 1, dtype=torch.float, device=self.device)
+        server_allocate_mat = torch.zeros(batch_size, server_len + 1, dtype=torch.long, device=self.device)
 
         # 给服务器添加一个是否active位
         server_seq = torch.cat((server_input_seq, server_allocate_mat[:, :-1].unsqueeze(-1)), dim=-1)
@@ -192,12 +192,21 @@ class PointerNet(nn.Module):
         user_allocate_num = torch.sum(user_allocate_list != -1, dim=1)
         user_allocated_props = user_allocate_num.float() / user_len
 
-        # 服务器被分配的已经全部置为Ture，(batch_size)
         server_used_num = torch.sum(server_allocate_mat[:, :-1], dim=1)
         server_used_props = server_used_num.float() / server_len
 
-        return -(user_allocated_props - server_used_props * self.server_reward_rate),\
-            action_probs, action_idx, user_allocated_props, server_used_props, user_allocate_list
+        # 已使用的服务器的资源利用率
+        original_servers_capacity = server_seq[:, :, 3:7]
+        server_allocated_flag = server_allocate_mat[:, :-1].unsqueeze(-1).expand(batch_size, server_len, 4)
+        used_original_server = original_servers_capacity.masked_fill(~server_allocated_flag.bool(), value=0)
+        servers_remain_capacity = tmp_server_capacity.masked_fill(~server_allocated_flag.bool(), value=0)
+        sum_all_capacity = torch.sum(used_original_server, dim=(1, 2))
+        sum_remain_capacity = torch.sum(servers_remain_capacity, dim=(1, 2))
+        capacity_used_props = 1 - sum_remain_capacity / sum_all_capacity
+
+        # 原本的reward需要减这个 - server_used_props * self.server_reward_rate
+        return -(user_allocated_props + capacity_used_props), \
+            action_probs, action_idx, user_allocated_props, server_used_props, capacity_used_props, user_allocate_list
 
 
 def can_allocate(workload: torch.Tensor, capacity: torch.Tensor):
