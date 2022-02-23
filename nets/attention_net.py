@@ -3,38 +3,50 @@ import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-# from nets.graph_encoder import GraphAttentionEncoder
+from nets.graph_encoder import GraphAttentionEncoder
 
 
 class UserEncoder(nn.Module):
     def __init__(self, input_dim, hidden_dim, n_heads=8, n_layers=6,
-                 normalization='batch', feed_forward_hidden=512, dropout=0.5):
+                 normalization='batch', feed_forward_hidden=512, dropout=0.5, embedding_type='linear'):
         super(UserEncoder, self).__init__()
-        # self.transformer = GraphAttentionEncoder(n_heads, hidden_dim, n_layers,
-        #                                          input_dim, normalization, feed_forward_hidden, dropout=dropout)
-        self.embedding = nn.Linear(input_dim, hidden_dim)
+        self.embedding_type = embedding_type
+        if embedding_type == 'transformer':
+            self.embedding = GraphAttentionEncoder(n_heads, hidden_dim, n_layers,
+                                                   input_dim, normalization, feed_forward_hidden, dropout=dropout)
+        elif embedding_type == 'linear':
+            self.embedding = nn.Linear(input_dim, hidden_dim)
+        elif embedding_type == 'lstm':
+            self.embedding = nn.LSTM(input_size=input_dim, hidden_size=hidden_dim,
+                                     batch_first=True, dropout=dropout)
+        else:
+            raise NotImplementedError
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, inputs):
-        # h,  # (batch_size, graph_size, embed_dim)
-        # h.mean(dim=1)  # average to get embedding of graph, (batch_size, embed_dim)
-        # return self.transformer(inputs)
-        return self.dropout(self.embedding(inputs))
+        if self.embedding == 'lstm':
+            flipped = torch.flip(inputs, dims=[1])
+            embedded, _ = self.embedding(flipped)
+            return torch.flip(embedded, dims=[1])
+        else:
+            return self.dropout(self.embedding(inputs))
 
 
 class ServerEncoder(nn.Module):
     def __init__(self, input_dim, hidden_dim, n_heads=8, n_layers=6,
-                 normalization='batch', feed_forward_hidden=512, dropout=0.5):
+                 normalization='batch', feed_forward_hidden=512, dropout=0.5, embedding_type='linear'):
         super(ServerEncoder, self).__init__()
-        # self.transformer = GraphAttentionEncoder(n_heads, hidden_dim, n_layers,
-        #                                          input_dim, normalization, feed_forward_hidden, dropout=dropout)
-        self.embedding = nn.Linear(input_dim, hidden_dim)
+        self.embedding_type = embedding_type
+        if embedding_type == 'transformer':
+            self.embedding = GraphAttentionEncoder(n_heads, hidden_dim, n_layers,
+                                                   input_dim, normalization, feed_forward_hidden, dropout=dropout)
+        elif embedding_type == 'linear':
+            self.embedding = nn.Linear(input_dim, hidden_dim)
+        else:
+            raise NotImplementedError
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, inputs):
-        # h,  # (batch_size, graph_size, embed_dim)
-        # h.mean(dim=1)  # average to get embedding of graph, (batch_size, embed_dim)
-        # return self.transformer(inputs)
         return self.dropout(self.embedding(inputs))
 
 
@@ -90,14 +102,16 @@ class Attention(nn.Module):
 
 class PointerNet(nn.Module):
     def __init__(self, user_input_dim, server_input_dim, hidden_dim, device, dropout=0.1, server_reward_rate=0.1,
-                 policy='sample'):
+                 policy='sample', user_embedding_type='linear', server_embedding_type='linear'):
         super(PointerNet, self).__init__()
         # decoder hidden size
         self.hidden_dim = hidden_dim
         self.device = device
 
-        self.user_encoder = UserEncoder(user_input_dim, hidden_dim, dropout=dropout).to(device)
-        self.server_encoder = ServerEncoder(server_input_dim + 1, hidden_dim, dropout=dropout).to(device)
+        self.user_encoder = UserEncoder(user_input_dim, hidden_dim, dropout=dropout,
+                                        embedding_type=user_embedding_type).to(device)
+        self.server_encoder = ServerEncoder(server_input_dim + 1, hidden_dim, dropout=dropout,
+                                            embedding_type=server_embedding_type).to(device)
 
         # glimpse输入（用户，上次选择的服务器），维度为2*dim， 跟所有的服务器作相似度并输出融合后的服务器
         self.glimpse = Glimpse(hidden_dim, hidden_dim, dropout=dropout).to(device)
