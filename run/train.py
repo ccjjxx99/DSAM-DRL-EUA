@@ -24,21 +24,25 @@ def seed_torch(seed=42):
 if __name__ == '__main__':
     seed_torch()
     batch_size = 1024
-    no_cuda = False
-    use_cuda = not no_cuda and torch.cuda.is_available()
+    use_cuda = True
     lr = 1e-4
     beta = 0.9
     max_grad_norm = 2.
     epochs = 1000
     dropout = 0
     server_reward_rate = 0.1
-    user_num = 200
+    user_num = 100
     resource_rate = 3
     x_end = 0.4
     y_end = 0.5
+    user_embedding_type = 'transformer'
+    server_embedding_type = 'linear'
+    train_type = 'RGRB'
     train_size = 100000
     valid_size = 10000
     test_size = 10000
+
+    use_cuda = use_cuda and torch.cuda.is_available()
     device = torch.device("cuda:0" if use_cuda else "cpu")
 
     train_filename = "D:/transformer_eua/dataset/train_server_" + str(x_end) + "_" + str(y_end) + "_user_" \
@@ -77,16 +81,17 @@ if __name__ == '__main__':
     valid_loader = DataLoader(dataset=valid_set, batch_size=batch_size, shuffle=False)
     test_loader = DataLoader(dataset=test_set, batch_size=batch_size, shuffle=False)
 
-    model = PointerNet(6, 7, 256, device=device, dropout=dropout, server_reward_rate=server_reward_rate)
+    model = PointerNet(6, 7, 256, device=device, dropout=dropout, server_reward_rate=server_reward_rate,
+                       user_embedding_type=user_embedding_type, server_embedding_type=server_embedding_type)
     optimizer = Adam(model.parameters(), lr=lr)
 
     critic_exp_mvg_avg = torch.zeros(1, device=device)
 
-    board_dir_name = "../log/" + time.strftime('%m%d%H%M', time.localtime(time.time())) \
+    board_dir_name = "D:/transformer_eua//log/" + time.strftime('%m%d%H%M', time.localtime(time.time())) \
                      + "_server_" + str(x_end) + "_" + str(y_end) + "_user_" \
                      + str(user_num) + "_rate_" + str(resource_rate)
     log_file_name = board_dir_name + '/log.log'
-    model_dir_name = "../model/" + time.strftime('%m%d%H%M', time.localtime(time.time())) \
+    model_dir_name = "D:/transformer_eua//model/" + time.strftime('%m%d%H%M', time.localtime(time.time())) \
                      + "_server_" + str(x_end) + "_" + str(y_end) + "_user_" \
                      + str(user_num) + "_rate_" + str(resource_rate)
     os.makedirs(model_dir_name, exist_ok=True)
@@ -100,21 +105,31 @@ if __name__ == '__main__':
     for epoch in range(epochs):
         # Train
         model.train()
-        model.policy = 'sample'
+
         for batch_idx, (server_seq, user_seq, masks) in enumerate(train_loader):
             server_seq, user_seq, masks = server_seq.to(device), user_seq.to(device), masks.to(device)
 
             optimizer.zero_grad()
+            model.policy = 'sample'
             reward, actions_probs, action_idx, user_allocated_props, \
                 server_used_props, capacity_used_props, user_allocate_list \
                 = model(user_seq, server_seq, masks)
 
-            if batch_idx == 0:
-                critic_exp_mvg_avg = reward.mean()
-            else:
-                critic_exp_mvg_avg = (critic_exp_mvg_avg * beta) + ((1. - beta) * reward.mean())
+            if train_type == 'RGRB':
+                model.policy = 'greedy'
+                reward2, actions_probs2, action_idx2, user_allocated_props2, \
+                    server_used_props2, capacity_used_props2, user_allocate_list2 \
+                    = model(user_seq, server_seq, masks)
+                advantage = reward - reward2
 
-            advantage = reward - critic_exp_mvg_avg
+            elif train_type == 'REINFORCE':
+                if batch_idx == 0:
+                    critic_exp_mvg_avg = reward.mean()
+                else:
+                    critic_exp_mvg_avg = (critic_exp_mvg_avg * beta) + ((1. - beta) * reward.mean())
+                advantage = reward - critic_exp_mvg_avg
+            else:
+                raise NotImplementedError
 
             log_probs = torch.zeros(user_seq.size(0), device=device)
             for prob in actions_probs:
@@ -122,8 +137,10 @@ if __name__ == '__main__':
                 log_probs += log_prob
             log_probs[log_probs < -1000] = -1000.
 
-            reinforce = advantage * log_probs
-            actor_loss = reinforce.mean()
+            # reinforce = advantage * log_probs
+            reinforce = torch.dot(advantage, log_probs)
+            # actor_loss = reinforce.mean()
+            actor_loss = reinforce
 
             optimizer.zero_grad()
             actor_loss.backward()
@@ -133,19 +150,20 @@ if __name__ == '__main__':
 
             critic_exp_mvg_avg = critic_exp_mvg_avg.detach()
 
-            log_and_print(
-                '{} Epoch {}: Train [{}/{} ({:.1f}%)]\tR:{:.6f}\tuser_props: {:.6f}'
-                '\tserver_props: {:.6f}\tcapacity_props:{:.6f}'.format(
-                    time.strftime('%H:%M:%S', time.localtime(time.time())),
-                    epoch,
-                    (batch_idx + 1) * len(user_seq),
-                    train_size,
-                    100. * (batch_idx + 1) / len(train_loader),
-                    torch.mean(reward),
-                    torch.mean(user_allocated_props),
-                    torch.mean(server_used_props),
-                    torch.mean(capacity_used_props)),
-                log_file_name)
+            if batch_idx % int(2048 / batch_size) == 0:
+                log_and_print(
+                    '{} Epoch {}: Train [{}/{} ({:.1f}%)]\tR:{:.6f}\tuser_props: {:.6f}'
+                    '\tserver_props: {:.6f}\tcapacity_props:{:.6f}'.format(
+                        time.strftime('%H:%M:%S', time.localtime(time.time())),
+                        epoch,
+                        (batch_idx + 1) * len(user_seq),
+                        train_size,
+                        100. * (batch_idx + 1) / len(train_loader),
+                        torch.mean(reward),
+                        torch.mean(user_allocated_props),
+                        torch.mean(server_used_props),
+                        torch.mean(capacity_used_props)),
+                    log_file_name)
 
         tensorboard_writer.add_scalar('train/train_reward', torch.mean(reward), epoch)
         tensorboard_writer.add_scalar('train/train_user_allocated_props', torch.mean(user_allocated_props), epoch)
@@ -164,20 +182,21 @@ if __name__ == '__main__':
                     server_used_props, capacity_used_props, user_allocate_list \
                     = model(user_seq, server_seq, masks)
 
-                log_and_print(
-                    '{} Epoch {}: Valid [{}/{} ({:.1f}%)]\tR:{:.6f}\tuser_props: {:.6f}'
-                    '\tserver_props: {:.6f}\tcapacity_props:{:.6f}'.format(
-                        time.strftime('%H:%M:%S', time.localtime(time.time())),
-                        epoch,
-                        (batch_idx + 1) * len(user_seq),
-                        valid_size,
-                        100. * (batch_idx + 1) / len(valid_loader),
-                        torch.mean(reward),
-                        torch.mean(user_allocated_props),
-                        torch.mean(server_used_props),
-                        torch.mean(capacity_used_props)
-                    ),
-                    log_file_name)
+                if batch_idx % int(2048 / batch_size) == 0:
+                    log_and_print(
+                        '{} Epoch {}: Valid [{}/{} ({:.1f}%)]\tR:{:.6f}\tuser_props: {:.6f}'
+                        '\tserver_props: {:.6f}\tcapacity_props:{:.6f}'.format(
+                            time.strftime('%H:%M:%S', time.localtime(time.time())),
+                            epoch,
+                            (batch_idx + 1) * len(user_seq),
+                            valid_size,
+                            100. * (batch_idx + 1) / len(valid_loader),
+                            torch.mean(reward),
+                            torch.mean(user_allocated_props),
+                            torch.mean(server_used_props),
+                            torch.mean(capacity_used_props)
+                        ),
+                        log_file_name)
 
             # Test
             R_list = []
@@ -239,11 +258,31 @@ if __name__ == '__main__':
                     best_time += 1
                     log_and_print("已经有{}轮效果没变好了".format(best_time), log_file_name)
 
+            log_and_print('', log_file_name)
+            torch.cuda.empty_cache()
+
+            # 如果超过10个epoch奖励都没有再提升，就停止训练
+            if best_time >= 10:
+                log_and_print("效果如下：", log_file_name)
+                for i in range(len(test_reward_list)):
+                    log_and_print("Epoch: {}\treward: {}\tuser_props: {}\tserver_props: {}\tcapacity_props: {}"
+                                  .format(i, test_reward_list[i], test_user_list[i],
+                                          test_server_list[i], test_capacity_list[i]),
+                                  log_file_name)
+                model_filename = model_dir_name + "/" + time.strftime(
+                    '%m%d%H%M', time.localtime(time.time())
+                ) + "_{:.2f}_{:.2f}_{:.2f}".format(best_user * 100, best_server * 100, best_capacity * 100) + '.mdl'
+                torch.save(best_state, model_filename)
+                log_and_print("模型已存储到: {}".format(model_filename), log_file_name)
+                log_and_print("训练结束，最好的reward:{}，用户分配率:{}，服务器租用率:{}，资源利用率:{}"
+                              .format(best_r, best_user, best_server, best_capacity), log_file_name)
+                exit()
+
             # 每20个epoch保存一次模型：
             if epoch % 20 == 19:
-                model_filename = model_dir_name + "/" + time.strftime('%m%d%H%M', time.localtime(time.time())) \
-                                 + "_" + "%.2f" % (user_allo * 100) + "_" + "%.2f" % (server_use * 100) \
-                                 + "_" + "%.2f" % (capacity_use * 100) + '.mdl'
+                model_filename = model_dir_name + "/" + time.strftime(
+                    '%m%d%H%M', time.localtime(time.time())
+                ) + "_{:.2f}_{:.2f}_{:.2f}".format(user_allo * 100, server_use * 100, capacity_use * 100) + '.mdl'
                 state = {'model': model.state_dict(), 'optimizer': optimizer.state_dict(), 'epoch': epoch}
                 torch.save(state, model_filename)
                 log_and_print("模型已存储到: {}".format(model_filename), log_file_name)
@@ -252,29 +291,3 @@ if __name__ == '__main__':
                 # model.load_state_dict(checkpoint['model'])
                 # optimizer.load_state_dict(checkpoint['optimizer'])
                 # epoch = checkpoint(['epoch'])
-
-            log_and_print('', log_file_name)
-            torch.cuda.empty_cache()
-
-            # 如果超过20个epoch奖励都没有再提升，就停止训练
-            if best_time >= 20:
-                log_and_print("效果如下：", log_file_name)
-                for i in range(len(test_reward_list)):
-                    log_and_print("Epoch: {}\treward: {}\tuser_props: {}\tserver_props: {}\tcapacity_props: {}"
-                                  .format(i, test_reward_list[i], test_user_list[i],
-                                          test_server_list[i], test_capacity_list[i]),
-                                  log_file_name)
-                model_filename = model_dir_name + "/" + time.strftime('%m%d%H%M', time.localtime(time.time())) \
-                                 + "_" + "%.2f" % (best_user * 100) + "_" + "%.2f" % (best_server * 100) \
-                                 + "_" + "%.2f" % (best_capacity * 100) + '.mdl'
-                torch.save(best_state, model_filename)
-                log_and_print("模型已存储到: {}".format(model_filename), log_file_name)
-                log_and_print("训练结束，最好的reward:{}，用户分配率:{}，服务器租用率:{}，资源利用率:{}"
-                              .format(best_r, best_user, best_server, best_capacity), log_file_name)
-                exit()
-
-            # if epoch % 20 == 19:
-            #     lr = lr / 10
-            #     for param_group in optimizer.param_groups:
-            #         param_group['lr'] = lr
-            #     log_and_print("调整学习率为: {}".format(lr), log_file_name)
