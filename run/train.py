@@ -31,16 +31,21 @@ if __name__ == '__main__':
     epochs = 1000
     dropout = 0
     server_reward_rate = 0.1
-    user_num = 100
+    user_num = 200
     resource_rate = 3
     x_end = 0.4
     y_end = 0.5
-    user_embedding_type = 'transformer'
+    user_embedding_type = 'linear'
     server_embedding_type = 'linear'
-    train_type = 'RGRB'
+    train_type = 'REINFORCE'
     train_size = 100000
     valid_size = 10000
     test_size = 10000
+    wait_best_reward_epoch = 20
+
+    need_continue = True
+    continue_model_filename = "D:/transformer_eua/model/" \
+                              "02241521_server_0.4_0.5_user_200_rate_3/02241721_99.81_78.20_45.70.mdl"
 
     use_cuda = use_cuda and torch.cuda.is_available()
     device = torch.device("cuda:0" if use_cuda else "cpu")
@@ -85,13 +90,22 @@ if __name__ == '__main__':
                        user_embedding_type=user_embedding_type, server_embedding_type=server_embedding_type)
     optimizer = Adam(model.parameters(), lr=lr)
 
+    # 加载需要继续训练的模型
+    if need_continue:
+        checkpoint = torch.load(continue_model_filename)
+        model.load_state_dict(checkpoint['model'])
+        optimizer.load_state_dict(checkpoint['optimizer'])
+        start_epoch = checkpoint['epoch']
+    else:
+        start_epoch = 0
+
     critic_exp_mvg_avg = torch.zeros(1, device=device)
 
-    board_dir_name = "D:/transformer_eua//log/" + time.strftime('%m%d%H%M', time.localtime(time.time())) \
+    board_dir_name = "D:/transformer_eua/log/" + time.strftime('%m%d%H%M', time.localtime(time.time())) \
                      + "_server_" + str(x_end) + "_" + str(y_end) + "_user_" \
                      + str(user_num) + "_rate_" + str(resource_rate)
     log_file_name = board_dir_name + '/log.log'
-    model_dir_name = "D:/transformer_eua//model/" + time.strftime('%m%d%H%M', time.localtime(time.time())) \
+    model_dir_name = "D:/transformer_eua/model/" + time.strftime('%m%d%H%M', time.localtime(time.time())) \
                      + "_server_" + str(x_end) + "_" + str(y_end) + "_user_" \
                      + str(user_num) + "_rate_" + str(resource_rate)
     os.makedirs(model_dir_name, exist_ok=True)
@@ -102,7 +116,7 @@ if __name__ == '__main__':
     test_user_list = []
     test_server_list = []
     test_capacity_list = []
-    for epoch in range(epochs):
+    for epoch in range(start_epoch, epochs):
         # Train
         model.train()
 
@@ -244,7 +258,8 @@ if __name__ == '__main__':
                 best_user = user_allo
                 best_server = server_use
                 best_capacity = capacity_use
-                best_state = {'model': model.state_dict(), 'optimizer': optimizer.state_dict(), 'epoch': epoch}
+                best_state = {'model': model.state_dict(), 'optimizer': optimizer.state_dict(),
+                              'epoch': epoch}
                 best_time = 0
             else:
                 if r < best_r:
@@ -261,8 +276,8 @@ if __name__ == '__main__':
             log_and_print('', log_file_name)
             torch.cuda.empty_cache()
 
-            # 如果超过10个epoch奖励都没有再提升，就停止训练
-            if best_time >= 10:
+            # 如果超过设定的epoch次数奖励都没有再提升，就停止训练
+            if best_time >= wait_best_reward_epoch:
                 log_and_print("效果如下：", log_file_name)
                 for i in range(len(test_reward_list)):
                     log_and_print("Epoch: {}\treward: {}\tuser_props: {}\tserver_props: {}\tcapacity_props: {}"
@@ -283,11 +298,7 @@ if __name__ == '__main__':
                 model_filename = model_dir_name + "/" + time.strftime(
                     '%m%d%H%M', time.localtime(time.time())
                 ) + "_{:.2f}_{:.2f}_{:.2f}".format(user_allo * 100, server_use * 100, capacity_use * 100) + '.mdl'
-                state = {'model': model.state_dict(), 'optimizer': optimizer.state_dict(), 'epoch': epoch}
+                state = {'model': model.state_dict(), 'optimizer': optimizer.state_dict(),
+                         'epoch': epoch}
                 torch.save(state, model_filename)
                 log_and_print("模型已存储到: {}".format(model_filename), log_file_name)
-                # 加载方法
-                # checkpoint = torch.load(path)
-                # model.load_state_dict(checkpoint['model'])
-                # optimizer.load_state_dict(checkpoint['optimizer'])
-                # epoch = checkpoint(['epoch'])
