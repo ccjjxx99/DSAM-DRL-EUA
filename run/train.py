@@ -1,5 +1,6 @@
 import os
 import pickle
+import sys
 import time
 import random
 import numpy as np
@@ -8,6 +9,7 @@ from torch.optim import Adam
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
+sys.path.append('../../transformer_eua')
 from nets.attention_net import PointerNet
 from util.utils import log_and_print
 from data.eua_dataset import generate_three_set
@@ -23,7 +25,7 @@ def seed_torch(seed=42):
 
 if __name__ == '__main__':
     seed_torch()
-    batch_size = 1024
+    batch_size = 128
     use_cuda = True
     lr = 1e-4
     beta = 0.9
@@ -33,8 +35,8 @@ if __name__ == '__main__':
     server_reward_rate = 0.1
     user_num = 200
     resource_rate = 3
-    x_end = 0.4
-    y_end = 0.5
+    x_end = 0.5
+    y_end = 1
     user_embedding_type = 'linear'
     server_embedding_type = 'linear'
     train_type = 'REINFORCE'
@@ -42,6 +44,7 @@ if __name__ == '__main__':
     valid_size = 10000
     test_size = 10000
     wait_best_reward_epoch = 20
+    save_model_epoch_interval = 10
 
     need_continue = True
     continue_model_filename = "D:/transformer_eua/model/" \
@@ -293,8 +296,8 @@ if __name__ == '__main__':
                               .format(best_r, best_user, best_server, best_capacity), log_file_name)
                 exit()
 
-            # 每20个epoch保存一次模型：
-            if epoch % 20 == 19:
+            # 每interval个epoch保存一次模型：
+            if epoch % save_model_epoch_interval == save_model_epoch_interval - 1:
                 model_filename = model_dir_name + "/" + time.strftime(
                     '%m%d%H%M', time.localtime(time.time())
                 ) + "_{:.2f}_{:.2f}_{:.2f}".format(user_allo * 100, server_use * 100, capacity_use * 100) + '.mdl'
