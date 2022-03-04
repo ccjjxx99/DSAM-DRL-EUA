@@ -102,7 +102,7 @@ class Attention(nn.Module):
 
 class PointerNet(nn.Module):
     def __init__(self, user_input_dim, server_input_dim, hidden_dim, device, dropout=0.1, server_reward_rate=0.1,
-                 policy='sample', user_embedding_type='linear', server_embedding_type='linear'):
+                 policy='sample', user_embedding_type='linear', server_embedding_type='linear', beam_num=1):
         super(PointerNet, self).__init__()
         # decoder hidden size
         self.hidden_dim = hidden_dim
@@ -119,88 +119,58 @@ class PointerNet(nn.Module):
         self.sm = nn.Softmax(dim=1).to(device)
         self.server_reward_rate = server_reward_rate
         self.policy = policy
+        self.beam_num = beam_num
 
-    def forward(self, user_input_seq, server_input_seq, masks):
-        batch_size = user_input_seq.size(0)
-        user_len = user_input_seq.size(1)
-        server_len = server_input_seq.size(1)
-
-        # 真实分配情况
-        user_allocate_list = -torch.ones(batch_size, user_len, dtype=torch.long, device=self.device)
-        # 服务器分配矩阵，加一是为了给index为-1的来赋值
-        server_allocate_mat = torch.zeros(batch_size, server_len + 1, dtype=torch.long, device=self.device)
-
-        # 给服务器添加一个是否active位
-        server_seq = torch.cat((server_input_seq, server_allocate_mat[:, :-1].unsqueeze(-1)), dim=-1)
-
-        # encoder_output => (batch_size, max_seq_len, hidden_size) if batch_first
-        # hidden_size is usually set same as embedding size
-        # encoder_hidden => (num_layers * num_directions, batch_size, hidden_size) for each of h_n and c_n
-        user_encoder_outputs = self.user_encoder(user_input_seq)
+    def choose_server_id(self, mask, user, static_server_seq, tmp_server_capacity, server_active):
+        """
+        每一步根据用户和所有服务器，输出要选择的服务器
+        """
+        server_seq = torch.cat((static_server_seq, tmp_server_capacity, server_active), dim=-1)
         server_encoder_outputs = self.server_encoder(server_seq)
+        server_glimpse = self.glimpse(user, server_encoder_outputs)
 
-        # last_chosen_server = torch.zeros(batch_size, 1, self.hidden_dim, device=self.device)
-        action_probs = []
-        action_idx = []
+        # get a pointer distribution over the encoder outputs using attention
+        # (batch_size, server_len)
+        logits = self.pointer(server_glimpse, server_encoder_outputs, mask)
+        # (batch_size, server_len)
+        probs = F.softmax(logits, dim=1)
 
-        # (batch_size, server_len 20, server_dim 4)
-        tmp_server_capacity = server_seq[:, :, 3:7].clone()
+        if self.policy == 'sample':
+            # (batch_size, 1)
+            idx = torch.multinomial(probs, num_samples=self.beam_num)
+            prob = torch.gather(probs, dim=1, index=idx)
+        elif self.policy == 'greedy':
+            prob, idx = torch.topk(probs, k=self.beam_num, dim=-1)
+        else:
+            raise NotImplementedError
 
-        for i in range(user_len):
-            mask = masks[:, i]
-
-            user = user_encoder_outputs[:, i, :].unsqueeze(1)
-
-            server_glimpse = self.glimpse(user, server_encoder_outputs)
-
-            # get a pointer distribution over the encoder outputs using attention
-            # (batch_size, server_len)
-            logits = self.pointer(server_glimpse, server_encoder_outputs, mask)
-            # (batch_size, server_len)
-            probs = F.softmax(logits, dim=1)
-
-            if self.policy == 'sample':
-                # (batch_size, 1)
-                idx = probs.multinomial(num_samples=1)
-                prob = torch.gather(probs, dim=1, index=idx)
-            elif self.policy == 'greedy':
-                prob, idx = probs.topk(k=1)
-            else:
-                raise NotImplementedError
-
+        if self.beam_num == 1:
             prob = prob.squeeze(1)
             idx = idx.squeeze(1)
-            action_probs.append(prob)
-            action_idx.append(idx)
 
-            # 第j个用户的分配服务器，取值只有0-19
-            server_id = idx
-            # 取出一个batch里所有第j个用户选择的服务器
-            index_tensor = server_id.unsqueeze(-1).unsqueeze(-1).expand(batch_size, 1, 4)  # 4个资源维度
-            j_th_server_capacity = torch.gather(tmp_server_capacity, dim=1, index=index_tensor).squeeze(1)
-            # (batch_size)的True，False矩阵
-            can_be_allocated = can_allocate(user_input_seq[:, i, 2:], j_th_server_capacity)
-            # 如果不能分配容量就不减
-            mask = can_be_allocated.unsqueeze(-1).expand(batch_size, 4)
-            # 切片时指定batch和server_id对应关系
-            batch_range = torch.arange(batch_size)
-            # 服务器减去相应容量
-            tmp_server_capacity[batch_range, server_id] -= user_input_seq[:, i, 2:] * mask
-            # 记录服务器分配情况，即server_id和mask的内积
-            server_id = torch.masked_fill(server_id, mask=~can_be_allocated, value=-1)
-            # 真实分配情况
-            user_allocate_list[:, i] = server_id
-            # 给分配了的服务器在服务器分配矩阵中赋值为True
-            server_allocate_mat[batch_range, server_id] = 1
+        return prob, idx
 
-            server_now = torch.cat((server_seq[:, :, :3], tmp_server_capacity,
-                                    server_allocate_mat[:, :-1].unsqueeze(-1)),
-                                   dim=-1)
-            server_encoder_outputs = self.server_encoder(server_now)
+    @staticmethod
+    def update_server_capacity(server_id, tmp_server_capacity, user_workload):
+        batch_size = server_id.size(0)
+        # 取出一个batch里所有第j个用户选择的服务器
+        index_tensor = server_id.unsqueeze(-1).unsqueeze(-1).expand(batch_size, 1, 4)  # 4个资源维度
+        j_th_server_capacity = torch.gather(tmp_server_capacity, dim=1, index=index_tensor).squeeze(1)
+        # (batch_size)的True，False矩阵
+        can_be_allocated = can_allocate(user_workload, j_th_server_capacity)
+        # 如果不能分配容量就不减
+        mask = can_be_allocated.unsqueeze(-1).expand(batch_size, 4)
+        # 切片时指定batch和server_id对应关系
+        batch_range = torch.arange(batch_size)
+        # 服务器减去相应容量
+        tmp_server_capacity[batch_range, server_id] -= user_workload * mask
+        # 记录服务器分配情况，即server_id和mask的内积
+        server_id = torch.masked_fill(server_id, mask=~can_be_allocated, value=-1)
+        return tmp_server_capacity, server_id
 
-        action_probs = torch.stack(action_probs)
-        action_idx = torch.stack(action_idx, dim=-1)
-
+    @staticmethod
+    def calc_rewards(user_allocate_list, user_len, server_allocate_mat, server_len,
+                     original_servers_capacity, batch_size, tmp_server_capacity):
         # 目前user_allocate_list是(batch_size, user_len)
         # 计算每个分配的用户数，即不是-1的个数，(batch_size)
         user_allocate_num = torch.sum(user_allocate_list != -1, dim=1)
@@ -210,17 +180,209 @@ class PointerNet(nn.Module):
         server_used_props = server_used_num.float() / server_len
 
         # 已使用的服务器的资源利用率
-        original_servers_capacity = server_seq[:, :, 3:7]
         server_allocated_flag = server_allocate_mat[:, :-1].unsqueeze(-1).expand(batch_size, server_len, 4)
         used_original_server = original_servers_capacity.masked_fill(~server_allocated_flag.bool(), value=0)
         servers_remain_capacity = tmp_server_capacity.masked_fill(~server_allocated_flag.bool(), value=0)
         sum_all_capacity = torch.sum(used_original_server, dim=(1, 2))
         sum_remain_capacity = torch.sum(servers_remain_capacity, dim=(1, 2))
         capacity_used_props = 1 - sum_remain_capacity / sum_all_capacity
+        return user_allocated_props, server_used_props, capacity_used_props
 
-        # 原本的reward需要减这个 - server_used_props * self.server_reward_rate
+    def forward(self, user_input_seq, server_input_seq, masks):
+        if self.beam_num != 1:
+            return self.beam_forward(user_input_seq, server_input_seq, masks)
+
+        batch_size = user_input_seq.size(0)
+        user_len = user_input_seq.size(1)
+        server_len = server_input_seq.size(1)
+
+        # 真实分配情况
+        user_allocate_list = -torch.ones(batch_size, user_len, dtype=torch.long, device=self.device)
+        # 服务器分配矩阵，加一是为了给index为-1的来赋值
+        server_allocate_mat = torch.zeros(batch_size, server_len + 1, dtype=torch.long, device=self.device)
+
+        # 服务器信息由三部分组成
+        static_server_seq = server_input_seq[:, :, :3]
+        tmp_server_capacity = server_input_seq[:, :, 3:].clone()
+
+        user_encoder_outputs = self.user_encoder(user_input_seq)
+
+        action_probs = []
+        action_idx = []
+
+        for i in range(user_len):
+            mask = masks[:, i]
+            user_code = user_encoder_outputs[:, i, :].unsqueeze(1)
+            prob, idx = self.choose_server_id(mask, user_code, static_server_seq, tmp_server_capacity,
+                                              server_allocate_mat[:, :-1].unsqueeze(-1))
+
+            action_probs.append(prob)
+            action_idx.append(idx)
+
+            tmp_server_capacity, idx = self.update_server_capacity(idx, tmp_server_capacity, user_input_seq[:, i, 2:])
+
+            # 真实分配情况
+            user_allocate_list[:, i] = idx
+            # 给分配了的服务器在服务器分配矩阵中赋值为True
+            batch_range = torch.arange(batch_size)
+            server_allocate_mat[batch_range, idx] = 1
+
+        action_probs = torch.stack(action_probs)
+        action_idx = torch.stack(action_idx, dim=-1)
+
+        user_allocated_props, server_used_props, capacity_used_props = \
+            self.calc_rewards(user_allocate_list, user_len, server_allocate_mat, server_len,
+                              server_input_seq[:, :, 3:].clone(), batch_size, tmp_server_capacity)
+
         return -(user_allocated_props + capacity_used_props), \
             action_probs, action_idx, user_allocated_props, server_used_props, capacity_used_props, user_allocate_list
+
+    def beam_forward(self, user_input_seq, server_input_seq, masks):
+        batch_size = user_input_seq.size(0)
+        user_len = user_input_seq.size(1)
+        server_len = server_input_seq.size(1)
+        b = self.beam_num
+        batch_range = torch.arange(batch_size)
+
+        # 真实分配情况
+        user_allocate_lists = -torch.ones(batch_size, b, user_len, dtype=torch.long, device=self.device)
+        # 服务器分配矩阵，加一是为了给index为-1的来赋值
+        server_allocate_mats = torch.zeros(batch_size, b, server_len + 1, dtype=torch.long, device=self.device)
+
+        # 服务器信息由三部分组成
+        static_server_seq = server_input_seq[:, :, :3]
+        now_server_capacities = torch.clone(server_input_seq[:, :, 3:])
+
+        user_encoder_outputs = self.user_encoder(user_input_seq)
+
+        # 上一步已经选定的b个可能性的log和
+        action_probs_list = torch.zeros(batch_size, b, device=self.device)
+        # 上一步已经选定的b个路线 (batch_size, b, user_len)
+        action_idxes = None
+        # 上一步的服务器剩余容量 (batch_size, b, server_len, server_dim)
+        now_server_capacities = now_server_capacities.repeat(b, 1, 1, 1).permute(1, 0, 2, 3)
+
+        for i in range(user_len):
+            # 新建3个缓存器
+            # 这一步产生的b*b个可能的路线
+            tmp_action_idxes = torch.zeros(batch_size, b, b, i+1, dtype=torch.long, device=self.device)
+            # 这一步产生的b*b个可能性的log和
+            tmp_probs_list = torch.zeros(batch_size, b, b, device=self.device)
+
+            for m in range(b):
+                mask = masks[:, i]
+                user_code = user_encoder_outputs[:, i, :].unsqueeze(1)
+                # prob: (batch_size, b); idx: (batch_size, b)
+                prob, idx = self.choose_server_id(mask, user_code, static_server_seq,
+                                                  now_server_capacities[:, m],
+                                                  server_allocate_mats[:, m, :-1].unsqueeze(-1))
+
+                # 此时产生了b个结果，把所有结果都先放在tmp中
+                prob = torch.log(prob)
+                # 此时这b个结果的概率都和上次的概率相乘，即log相加
+                prob = prob + action_probs_list[:, m].unsqueeze(-1)
+
+                # 如果是第一个用户分配，那它分配只有b种可能作为分支的开始，也就不需要tmp来缓存b*b个
+                if i == 0:
+                    action_probs_list = prob
+                    # (batch_size, b, 1)
+                    action_idxes = idx.unsqueeze(-1)
+                    break
+
+                # b*b的概率缓存矩阵中第m行设置为现在的b个概率
+                tmp_probs_list[batch_range, m, :] = prob
+                # b*b的路径缓存矩阵中第m行设置为现在的b个路径
+                # (batch_size, b, i) -> (batch_size, b, i+1)
+                # 取原来的路径
+                # (batch_size, i) = (batch_size, b, i)取第二维
+                old_idxes = action_idxes[:, m, :]
+                # 给现在的路径连接上原来的路径，现在路径的维度是(batch_size, b)
+                # 要给5个过去的路径分别连上现在的idx，所以过去的路径要*5, 变成(batch_size, b, i)
+                old_idxes = old_idxes.unsqueeze(1).repeat(1, b, 1)
+                # 现在路径在最后补一维，变成(batch_size, b, 1)
+                idx = idx.unsqueeze(-1)
+                # 最后变成(batch_size, b, i+1)
+                now_b_action_idxes = torch.cat([old_idxes, idx], dim=-1)
+                # (batch_size, b, b, i+1)
+                tmp_action_idxes[batch_range, m, :] = now_b_action_idxes
+
+            if i != 0:
+                # 此时b*b个结果都已经产生，选出其中b个可能性最大的：
+                tmp_probs_list = tmp_probs_list.view(batch_size, b*b)
+                # 得到使probs最大的index就能用torch.gather取出动作
+                tmp_action_idxes = tmp_action_idxes.view(batch_size, b*b, i+1)
+                prob_values, indices = torch.topk(tmp_probs_list, dim=1, k=b)
+                # 更新probs存储器
+                action_probs_list = torch.gather(tmp_probs_list, dim=1, index=indices)
+                # 更新路径存储器
+                indices1 = indices.unsqueeze(-1).expand(batch_size, b, i+1)
+                action_idxes = torch.gather(tmp_action_idxes, dim=1, index=indices1)
+                # 更新对应的tmp_capacity
+                now_server_capacities = now_server_capacities.unsqueeze(2)
+                now_server_capacities = now_server_capacities.expand(batch_size, b, b, server_len, 4)
+                now_server_capacities = now_server_capacities.reshape(batch_size, b*b, server_len, 4)
+                indices2 = indices.view(batch_size, b, 1, 1)
+                indices2 = indices2.expand(batch_size, b, server_len, 4)
+                now_server_capacities = torch.gather(now_server_capacities, dim=1, index=indices2)
+                # 更新真实分配情况
+                user_allocate_lists = user_allocate_lists.unsqueeze(2)
+                user_allocate_lists = user_allocate_lists.expand(batch_size, b, b, user_len)
+                user_allocate_lists = user_allocate_lists.reshape(batch_size, b*b, user_len)
+                indices3 = indices.view(batch_size, b, 1)
+                indices3 = indices3.expand(batch_size, b, user_len)
+                user_allocate_lists = torch.gather(user_allocate_lists, dim=1, index=indices3)
+                # 更新服务器使用情况
+                server_allocate_mats = server_allocate_mats.unsqueeze(2)
+                server_allocate_mats = server_allocate_mats.expand(batch_size, b, b, server_len+1)
+                server_allocate_mats = server_allocate_mats.reshape(batch_size, b*b, server_len+1)
+                indices4 = indices.view(batch_size, b, 1)
+                indices4 = indices4.expand(batch_size, b, server_len+1)
+                server_allocate_mats = torch.gather(server_allocate_mats, dim=1, index=indices4)
+
+            for m in range(b):
+                # 对现有列表里面的b个结果进行服务器容量更新
+                next_server_capacity, idx = self.update_server_capacity(action_idxes[:, m, -1],
+                                                                        now_server_capacities[:, m].clone(),
+                                                                        user_input_seq[:, i, 2:])
+                now_server_capacities[batch_range, m] = next_server_capacity
+                # 真实分配情况
+                user_allocate_lists[batch_range, m, i] = idx
+                # 给分配了的服务器在服务器分配矩阵中赋值为True
+                server_allocate_mats[batch_range, m, idx] = 1
+
+        # 最后计算所有的奖励
+        user_allo = []
+        server_use = []
+        capacity_use = []
+        rewards = []
+        for m in range(b):
+            # 所有用户分配完后，把各种指标stack成tensor
+            user_allocated_props, server_used_props, capacity_used_props = \
+                self.calc_rewards(user_allocate_lists[:, m], user_len, server_allocate_mats[:, m], server_len,
+                                  server_input_seq[:, :, 3:].clone(), batch_size, now_server_capacities[:, m])
+            reward = (user_allocated_props + capacity_used_props)
+            user_allo.append(user_allocated_props)
+            server_use.append(server_used_props)
+            capacity_use.append(capacity_used_props)
+            rewards.append(reward)
+
+        # (batch_size, b)
+        rewards = torch.stack(rewards, dim=-1)
+        user_allo = torch.stack(user_allo, dim=-1)
+        server_use = torch.stack(server_use, dim=-1)
+        capacity_use = torch.stack(capacity_use, dim=-1)
+
+        max_reward_value, indices = torch.max(rewards, dim=-1)
+        indices = indices.unsqueeze(-1)
+        max_user_allo = torch.gather(user_allo, dim=1, index=indices)
+        max_server_use = torch.gather(server_use, dim=1, index=indices)
+        max_capacity_use = torch.gather(capacity_use, dim=1, index=indices)
+        indices = indices.unsqueeze(-1).expand(batch_size, 1, user_len)
+        best_idxs = torch.gather(action_idxes, dim=1, index=indices)
+        best_user_allocate_lists = torch.gather(user_allocate_lists, dim=1, index=indices)
+
+        return -(max_user_allo + max_capacity_use), \
+            action_probs_list, best_idxs, max_user_allo, max_server_use, max_capacity_use, best_user_allocate_lists
 
 
 def can_allocate(workload: torch.Tensor, capacity: torch.Tensor):

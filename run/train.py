@@ -25,7 +25,8 @@ def seed_torch(seed=42):
 
 if __name__ == '__main__':
     seed_torch()
-    batch_size = 128
+    batch_size = 256
+    beam_num = 2
     use_cuda = True
     lr = 1e-4
     beta = 0.9
@@ -37,7 +38,7 @@ if __name__ == '__main__':
     resource_rate = 3
     x_end = 0.5
     y_end = 1
-    user_embedding_type = 'linear'
+    user_embedding_type = 'transformer'
     server_embedding_type = 'linear'
     train_type = 'REINFORCE'
     train_size = 100000
@@ -46,7 +47,7 @@ if __name__ == '__main__':
     wait_best_reward_epoch = 20
     save_model_epoch_interval = 10
 
-    need_continue = True
+    need_continue = False
     continue_model_filename = "D:/transformer_eua/model/" \
                               "02241521_server_0.4_0.5_user_200_rate_3/02241721_99.81_78.20_45.70.mdl"
 
@@ -122,12 +123,12 @@ if __name__ == '__main__':
     for epoch in range(start_epoch, epochs):
         # Train
         model.train()
-
+        model.policy = 'sample'
+        model.beam_num = 1
         for batch_idx, (server_seq, user_seq, masks) in enumerate(train_loader):
             server_seq, user_seq, masks = server_seq.to(device), user_seq.to(device), masks.to(device)
 
             optimizer.zero_grad()
-            model.policy = 'sample'
             reward, actions_probs, action_idx, user_allocated_props, \
                 server_used_props, capacity_used_props, user_allocate_list \
                 = model(user_seq, server_seq, masks)
@@ -154,9 +155,7 @@ if __name__ == '__main__':
                 log_probs += log_prob
             log_probs[log_probs < -1000] = -1000.
 
-            # reinforce = advantage * log_probs
             reinforce = torch.dot(advantage, log_probs)
-            # actor_loss = reinforce.mean()
             actor_loss = reinforce
 
             optimizer.zero_grad()
@@ -195,7 +194,7 @@ if __name__ == '__main__':
             for batch_idx, (server_seq, user_seq, masks) in enumerate(valid_loader):
                 server_seq, user_seq, masks = server_seq.to(device), user_seq.to(device), masks.to(device)
 
-                reward, actions_probs, action_idx, user_allocated_props, \
+                reward, _, action_idx, user_allocated_props, \
                     server_used_props, capacity_used_props, user_allocate_list \
                     = model(user_seq, server_seq, masks)
 
@@ -221,10 +220,11 @@ if __name__ == '__main__':
             server_used_props_list = []
             capacity_used_props_list = []
             model.policy = 'greedy'
+            model.beam_num = beam_num
             for batch_idx, (server_seq, user_seq, masks) in enumerate(test_loader):
                 server_seq, user_seq, masks = server_seq.to(device), user_seq.to(device), masks.to(device)
 
-                reward, actions_probs, action_idx, user_allocated_props, \
+                reward, _, action_idx, user_allocated_props, \
                     server_used_props, capacity_used_props, user_allocate_list \
                     = model(user_seq, server_seq, masks)
 
