@@ -76,7 +76,7 @@ class Glimpse(nn.Module):
 
 
 class Attention(nn.Module):
-    def __init__(self, hidden_dim, dropout=0.5):
+    def __init__(self, hidden_dim, dropout=0.1):
         super(Attention, self).__init__()
         self.hidden_size = hidden_dim
         self.W1 = nn.Linear(hidden_dim, hidden_dim, bias=False)
@@ -235,7 +235,7 @@ class PointerNet(nn.Module):
                               server_input_seq[:, :, 3:].clone(), batch_size, tmp_server_capacity)
 
         return -(user_allocated_props + capacity_used_props), \
-            action_probs, action_idx, user_allocated_props, server_used_props, capacity_used_props, user_allocate_list
+               action_probs, action_idx, user_allocated_props, server_used_props, capacity_used_props, user_allocate_list
 
     def beam_forward(self, user_input_seq, server_input_seq, masks):
         batch_size = user_input_seq.size(0)
@@ -265,7 +265,7 @@ class PointerNet(nn.Module):
         for i in range(user_len):
             # 新建3个缓存器
             # 这一步产生的b*b个可能的路线
-            tmp_action_idxes = torch.zeros(batch_size, b, b, i+1, dtype=torch.long, device=self.device)
+            tmp_action_idxes = torch.zeros(batch_size, b, b, i + 1, dtype=torch.long, device=self.device)
             # 这一步产生的b*b个可能性的log和
             tmp_probs_list = torch.zeros(batch_size, b, b, device=self.device)
 
@@ -308,35 +308,35 @@ class PointerNet(nn.Module):
 
             if i != 0:
                 # 此时b*b个结果都已经产生，选出其中b个可能性最大的：
-                tmp_probs_list = tmp_probs_list.view(batch_size, b*b)
+                tmp_probs_list = tmp_probs_list.view(batch_size, b * b)
                 # 得到使probs最大的index就能用torch.gather取出动作
-                tmp_action_idxes = tmp_action_idxes.view(batch_size, b*b, i+1)
+                tmp_action_idxes = tmp_action_idxes.view(batch_size, b * b, i + 1)
                 prob_values, indices = torch.topk(tmp_probs_list, dim=1, k=b)
                 # 更新probs存储器
                 action_probs_list = torch.gather(tmp_probs_list, dim=1, index=indices)
                 # 更新路径存储器
-                indices1 = indices.unsqueeze(-1).expand(batch_size, b, i+1)
+                indices1 = indices.unsqueeze(-1).expand(batch_size, b, i + 1)
                 action_idxes = torch.gather(tmp_action_idxes, dim=1, index=indices1)
                 # 更新对应的tmp_capacity
                 now_server_capacities = now_server_capacities.unsqueeze(2)
                 now_server_capacities = now_server_capacities.expand(batch_size, b, b, server_len, 4)
-                now_server_capacities = now_server_capacities.reshape(batch_size, b*b, server_len, 4)
+                now_server_capacities = now_server_capacities.reshape(batch_size, b * b, server_len, 4)
                 indices2 = indices.view(batch_size, b, 1, 1)
                 indices2 = indices2.expand(batch_size, b, server_len, 4)
                 now_server_capacities = torch.gather(now_server_capacities, dim=1, index=indices2)
                 # 更新真实分配情况
                 user_allocate_lists = user_allocate_lists.unsqueeze(2)
                 user_allocate_lists = user_allocate_lists.expand(batch_size, b, b, user_len)
-                user_allocate_lists = user_allocate_lists.reshape(batch_size, b*b, user_len)
+                user_allocate_lists = user_allocate_lists.reshape(batch_size, b * b, user_len)
                 indices3 = indices.view(batch_size, b, 1)
                 indices3 = indices3.expand(batch_size, b, user_len)
                 user_allocate_lists = torch.gather(user_allocate_lists, dim=1, index=indices3)
                 # 更新服务器使用情况
                 server_allocate_mats = server_allocate_mats.unsqueeze(2)
-                server_allocate_mats = server_allocate_mats.expand(batch_size, b, b, server_len+1)
-                server_allocate_mats = server_allocate_mats.reshape(batch_size, b*b, server_len+1)
+                server_allocate_mats = server_allocate_mats.expand(batch_size, b, b, server_len + 1)
+                server_allocate_mats = server_allocate_mats.reshape(batch_size, b * b, server_len + 1)
                 indices4 = indices.view(batch_size, b, 1)
-                indices4 = indices4.expand(batch_size, b, server_len+1)
+                indices4 = indices4.expand(batch_size, b, server_len + 1)
                 server_allocate_mats = torch.gather(server_allocate_mats, dim=1, index=indices4)
 
             for m in range(b):
@@ -382,7 +382,7 @@ class PointerNet(nn.Module):
         best_user_allocate_lists = torch.gather(user_allocate_lists, dim=1, index=indices)
 
         return -(max_user_allo + max_capacity_use), \
-            action_probs_list, best_idxs, max_user_allo, max_server_use, max_capacity_use, best_user_allocate_lists
+               action_probs_list, best_idxs, max_user_allo, max_server_use, max_capacity_use, best_user_allocate_lists
 
 
 def can_allocate(workload: torch.Tensor, capacity: torch.Tensor):
@@ -396,3 +396,27 @@ def can_allocate(workload: torch.Tensor, capacity: torch.Tensor):
     bools = capacity >= workload
     # (batch)，bool值
     return bools.all(dim=1)
+
+
+class CriticNet(nn.Module):
+    def __init__(self, user_input_dim, server_input_dim, hidden_dim, device, dropout=0.1,
+                 user_embedding_type='linear', server_embedding_type='linear'):
+        super(CriticNet, self).__init__()
+        self.hidden_dim = hidden_dim
+        self.device = device
+
+        self.user_encoder = UserEncoder(user_input_dim, hidden_dim, dropout=dropout,
+                                        embedding_type=user_embedding_type).to(device)
+        self.server_encoder = ServerEncoder(server_input_dim, hidden_dim, dropout=dropout,
+                                            embedding_type=server_embedding_type).to(device)
+        self.fusion = nn.Linear(hidden_dim * 2, hidden_dim, device=device)
+        self.out = nn.Linear(hidden_dim, 1, device=device)
+
+    def forward(self, user_input_seq, server_input_seq):
+        user_code = self.user_encoder(user_input_seq)
+        user_all = torch.mean(user_code, dim=1)
+
+        server_code = self.server_encoder(server_input_seq)
+        server_all = torch.mean(server_code, dim=1)
+
+        return self.out(self.fusion(torch.cat([user_all, server_all], dim=-1))).squeeze(-1)
