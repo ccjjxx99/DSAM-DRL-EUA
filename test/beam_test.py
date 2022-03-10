@@ -4,7 +4,7 @@ from nets.attention_net import PointerNet
 import pickle
 import time
 
-batch_size = 16
+batch_size = 30
 beam_num = 10
 use_cuda = True
 lr = 1e-4
@@ -20,7 +20,8 @@ y_end = 1
 user_embedding_type = 'transformer'
 server_embedding_type = 'linear'
 # train_type = 'REINFORCE'
-train_type = 'ac'
+# train_type = 'ac'
+train_type = 'RGRB'
 train_size = 100000
 valid_size = 10000
 test_size = 10000
@@ -39,7 +40,7 @@ print("正在加载模型")
 model = PointerNet(6, 7, 256, device=device, dropout=dropout, server_reward_rate=server_reward_rate,
                    user_embedding_type=user_embedding_type, server_embedding_type=server_embedding_type)
 
-model_filename = "D:/transformer_eua/model/03081540_server_0.5_1_user_200_rate_3/03091912_94.94_61.86_54.52.mdl"
+model_filename = "D:/transformer_eua/model/03092254_server_0.5_1_user_200_rate_3/03101039_94.72_61.44_54.64.mdl"
 checkpoint = torch.load(model_filename)
 model.load_state_dict(checkpoint['model'])
 
@@ -55,8 +56,7 @@ model.beam_num = beam_num
 for batch_idx, (server_seq, user_seq, masks) in enumerate(test_loader):
     server_seq, user_seq, masks = server_seq.to(device), user_seq.to(device), masks.to(device)
 
-    reward, _, action_idx, user_allocated_props, \
-    server_used_props, capacity_used_props, user_allocate_list \
+    reward, _, action_idx, user_allocated_props, server_used_props, capacity_used_props, user_allocate_list \
         = model(user_seq, server_seq, masks)
 
     beam_R_list.append(reward)
@@ -64,7 +64,7 @@ for batch_idx, (server_seq, user_seq, masks) in enumerate(test_loader):
     beam_server_used_props_list.append(server_used_props)
     beam_capacity_used_props_list.append(capacity_used_props)
 
-    print('{} Train [{}/{} ({:.1f}%)]\tR:{:.6f}\tuser_props: {:.6f}'
+    print('{} Test [{}/{} ({:.1f}%)]\tR:{:.6f}\tuser_props: {:.6f}'
           '\tserver_props: {:.6f}\tcapacity_props:{:.6f}'.format(time.strftime('%H:%M:%S', time.localtime(time.time())),
                                                                  (batch_idx + 1) * len(user_seq),
                                                                  train_size,

@@ -27,7 +27,7 @@ def seed_torch(seed=42):
 
 if __name__ == '__main__':
     seed_torch()
-    batch_size = 128
+    batch_size = 256
     use_cuda = True
     lr = 1e-4
     beta = 0.9
@@ -42,7 +42,8 @@ if __name__ == '__main__':
     user_embedding_type = 'transformer'
     server_embedding_type = 'linear'
     # train_type = 'REINFORCE'
-    train_type = 'ac'
+    # train_type = 'ac'
+    train_type = 'RGRB'
     train_size = 100000
     valid_size = 10000
     test_size = 10000
@@ -166,6 +167,7 @@ if __name__ == '__main__':
                         server_used_props2, capacity_used_props2, user_allocate_list2 \
                         = model(user_seq, server_seq, masks)
                     advantage = reward - reward2
+                model.policy = 'sample'
 
             else:
                 raise NotImplementedError
@@ -287,7 +289,7 @@ if __name__ == '__main__':
                                   'critic_model': critic_model.state_dict(),
                                   'critic_optimizer': critic_optimizer.state_dict()}
                 else:
-                    state = {'model': model.state_dict(), 'optimizer': optimizer.state_dict(), 'epoch': epoch}
+                    best_state = {'model': model.state_dict(), 'optimizer': optimizer.state_dict(), 'epoch': epoch}
                 best_time = 0
             else:
                 if r < best_r:
@@ -308,7 +310,8 @@ if __name__ == '__main__':
             if best_time >= wait_best_reward_epoch:
                 log_and_print("效果如下：", log_file_name)
                 for i in range(len(test_reward_list)):
-                    log_and_print("Epoch: {}\treward: {}\tuser_props: {}\tserver_props: {}\tcapacity_props: {}"
+                    log_and_print("Epoch: {}\treward: {:.6f}\tuser_props: {:.6f}"
+                                  "\tserver_props: {:.6f}\tcapacity_props: {:.6f}"
                                   .format(i, test_reward_list[i], test_user_list[i],
                                           test_server_list[i], test_capacity_list[i]),
                                   log_file_name)
