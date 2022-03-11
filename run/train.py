@@ -1,6 +1,5 @@
 import os
 import pickle
-import sys
 import time
 import random
 import numpy as np
@@ -10,7 +9,6 @@ from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 import torch.nn.functional as F
 
-sys.path.append('../../transformer_eua')
 from nets.attention_net import PointerNet
 from nets.attention_net import CriticNet
 from util.utils import log_and_print
@@ -56,8 +54,7 @@ if __name__ == '__main__':
     device = torch.device("cuda:0" if use_cuda else "cpu")
 
     need_continue = False
-    continue_model_filename = "D:/transformer_eua/model/" \
-                              "02241521_server_0.4_0.5_user_200_rate_3/02241721_99.81_78.20_45.70.mdl"
+    continue_model_filename = None
 
     train_filename = "D:/transformer_eua/dataset/train_server_" + str(x_end) + "_" + str(y_end) + "_user_" \
                      + str(user_num) + "_miu_" + str(miu) + "_sigma_" + str(sigma) + "_size_" + str(train_size) + ".pkl"
@@ -133,10 +130,10 @@ if __name__ == '__main__':
     os.makedirs(board_dir_name, exist_ok=True)
     tensorboard_writer = SummaryWriter(board_dir_name)
 
-    test_reward_list = []
-    test_user_list = []
-    test_server_list = []
-    test_capacity_list = []
+    all_valid_reward_list = []
+    all_valid_user_list = []
+    all_valid_server_list = []
+    all_valid_capacity_list = []
     for epoch in range(start_epoch, epochs):
         # Train
         model.train()
@@ -213,12 +210,83 @@ if __name__ == '__main__':
         tensorboard_writer.add_scalar('train/train_server_used_props', torch.mean(server_used_props), epoch)
         tensorboard_writer.add_scalar('train/train_capacity_used_props', torch.mean(capacity_used_props), epoch)
 
-        # Valid
+        # Valid and Test
         model.eval()
         model.policy = 'greedy'
         log_and_print('', log_file_name)
         with torch.no_grad():
+            # Validation
+            valid_R_list = []
+            valid_user_allocated_props_list = []
+            valid_server_used_props_list = []
+            valid_capacity_used_props_list = []
+            model.policy = 'greedy'
+            model.beam_num = 1
             for batch_idx, (server_seq, user_seq, masks) in enumerate(valid_loader):
+                server_seq, user_seq, masks = server_seq.to(device), user_seq.to(device), masks.to(device)
+
+                reward, _, action_idx, user_allocated_props, \
+                    server_used_props, capacity_used_props, user_allocate_list \
+                    = model(user_seq, server_seq, masks)
+
+                valid_R_list.append(reward)
+                valid_user_allocated_props_list.append(user_allocated_props)
+                valid_server_used_props_list.append(server_used_props)
+                valid_capacity_used_props_list.append(capacity_used_props)
+
+            valid_R_list = torch.cat(valid_R_list)
+            valid_user_allocated_props_list = torch.cat(valid_user_allocated_props_list)
+            valid_server_used_props_list = torch.cat(valid_server_used_props_list)
+            valid_capacity_used_props_list = torch.cat(valid_capacity_used_props_list)
+            valid_r = torch.mean(valid_R_list)
+            valid_user_allo = torch.mean(valid_user_allocated_props_list)
+            valid_server_use = torch.mean(valid_server_used_props_list)
+            valid_capacity_use = torch.mean(valid_capacity_used_props_list)
+            log_and_print('{} Epoch {}: Test \tR:{:.6f}\tuser_props: {:.6f}'
+                          '\tserver_props: {:.6f}\tcapacity_props:{:.6f}'
+                          .format(time.strftime('%H:%M:%S', time.localtime(time.time())), epoch, valid_r,
+                                  valid_user_allo, valid_server_use, valid_capacity_use),
+                          log_file_name)
+
+            tensorboard_writer.add_scalar('valid/valid_reward', valid_r, epoch)
+            tensorboard_writer.add_scalar('valid/valid_user_allocated_props', valid_user_allo, epoch)
+            tensorboard_writer.add_scalar('valid/valid_server_used_props', valid_server_use, epoch)
+            tensorboard_writer.add_scalar('valid/valid_capacity_used_props', valid_capacity_use, epoch)
+
+            all_valid_reward_list.append(valid_r)
+            all_valid_user_list.append(valid_user_allo)
+            all_valid_server_list.append(valid_server_use)
+            all_valid_capacity_list.append(valid_capacity_use)
+            if len(all_valid_reward_list) == 1:
+                best_r = valid_r
+                best_user = valid_user_allo
+                best_server = valid_server_use
+                best_capacity = valid_capacity_use
+                if train_type == 'ac':
+                    best_state = {'model': model.state_dict(), 'optimizer': optimizer.state_dict(), 'epoch': epoch,
+                                  'critic_model': critic_model.state_dict(),
+                                  'critic_optimizer': critic_optimizer.state_dict()}
+                else:
+                    best_state = {'model': model.state_dict(), 'optimizer': optimizer.state_dict(), 'epoch': epoch}
+                best_time = 0
+            else:
+                if valid_r < best_r:
+                    best_r = valid_r
+                    best_user = valid_user_allo
+                    best_server = valid_server_use
+                    best_capacity = valid_capacity_use
+                    best_time = 0
+                    log_and_print("目前本次reward最好", log_file_name)
+                else:
+                    best_time += 1
+                    log_and_print("已经有{}轮效果没变好了".format(best_time), log_file_name)
+
+            # Test
+            test_R_list = []
+            test_user_allocated_props_list = []
+            test_server_used_props_list = []
+            test_capacity_used_props_list = []
+            for batch_idx, (server_seq, user_seq, masks) in enumerate(test_loader):
                 server_seq, user_seq, masks = server_seq.to(device), user_seq.to(device), masks.to(device)
 
                 reward, _, action_idx, user_allocated_props, \
@@ -241,84 +309,41 @@ if __name__ == '__main__':
                         ),
                         log_file_name)
 
-            # Test
-            model.eval()
-            R_list = []
-            user_allocated_props_list = []
-            server_used_props_list = []
-            capacity_used_props_list = []
-            model.policy = 'greedy'
-            model.beam_num = 1
-            for batch_idx, (server_seq, user_seq, masks) in enumerate(test_loader):
-                server_seq, user_seq, masks = server_seq.to(device), user_seq.to(device), masks.to(device)
+                test_R_list.append(reward)
+                test_user_allocated_props_list.append(user_allocated_props)
+                test_server_used_props_list.append(server_used_props)
+                test_capacity_used_props_list.append(capacity_used_props)
 
-                reward, _, action_idx, user_allocated_props, \
-                    server_used_props, capacity_used_props, user_allocate_list \
-                    = model(user_seq, server_seq, masks)
+            test_R_list = torch.cat(test_R_list)
+            test_user_allocated_props_list = torch.cat(test_user_allocated_props_list)
+            test_server_used_props_list = torch.cat(test_server_used_props_list)
+            test_capacity_used_props_list = torch.cat(test_capacity_used_props_list)
 
-                R_list.append(reward)
-                user_allocated_props_list.append(user_allocated_props)
-                server_used_props_list.append(server_used_props)
-                capacity_used_props_list.append(capacity_used_props)
-
-            R_list = torch.cat(R_list)
-            user_allocated_props_list = torch.cat(user_allocated_props_list)
-            server_used_props_list = torch.cat(server_used_props_list)
-            capacity_used_props_list = torch.cat(capacity_used_props_list)
-            r = torch.mean(R_list)
-            user_allo = torch.mean(user_allocated_props_list)
-            server_use = torch.mean(server_used_props_list)
-            capacity_use = torch.mean(capacity_used_props_list)
+            test_r = torch.mean(test_R_list)
+            test_user_allo = torch.mean(test_user_allocated_props_list)
+            test_server_use = torch.mean(test_server_used_props_list)
+            test_capacity_use = torch.mean(test_capacity_used_props_list)
             log_and_print('{} Epoch {}: Test \tR:{:.6f}\tuser_props: {:.6f}'
                           '\tserver_props: {:.6f}\tcapacity_props:{:.6f}'
-                          .format(time.strftime('%H:%M:%S', time.localtime(time.time())), epoch, r, user_allo,
-                                  server_use, capacity_use),
+                          .format(time.strftime('%H:%M:%S', time.localtime(time.time())), epoch, test_r,
+                                  test_user_allo, test_server_use, test_capacity_use),
                           log_file_name)
-
-            tensorboard_writer.add_scalar('test/test_reward', r, epoch)
-            tensorboard_writer.add_scalar('test/test_user_allocated_props', user_allo, epoch)
-            tensorboard_writer.add_scalar('test/test_server_used_props', server_use, epoch)
-            tensorboard_writer.add_scalar('test/test_capacity_used_props', capacity_use, epoch)
-
-            test_reward_list.append(r)
-            test_user_list.append(user_allo)
-            test_server_list.append(server_use)
-            test_capacity_list.append(capacity_use)
-            if len(test_reward_list) == 1:
-                best_r = r
-                best_user = user_allo
-                best_server = server_use
-                best_capacity = capacity_use
-                if train_type == 'ac':
-                    best_state = {'model': model.state_dict(), 'optimizer': optimizer.state_dict(), 'epoch': epoch,
-                                  'critic_model': critic_model.state_dict(),
-                                  'critic_optimizer': critic_optimizer.state_dict()}
-                else:
-                    best_state = {'model': model.state_dict(), 'optimizer': optimizer.state_dict(), 'epoch': epoch}
-                best_time = 0
-            else:
-                if r < best_r:
-                    best_r = r
-                    best_user = user_allo
-                    best_server = server_use
-                    best_capacity = capacity_use
-                    best_time = 0
-                    log_and_print("目前本次reward最好", log_file_name)
-                else:
-                    best_time += 1
-                    log_and_print("已经有{}轮效果没变好了".format(best_time), log_file_name)
+            tensorboard_writer.add_scalar('test/test_reward', test_r, epoch)
+            tensorboard_writer.add_scalar('test/test_user_allocated_props', test_user_allo, epoch)
+            tensorboard_writer.add_scalar('test/test_server_used_props', test_server_use, epoch)
+            tensorboard_writer.add_scalar('test/test_capacity_used_props', test_capacity_use, epoch)
 
             log_and_print('', log_file_name)
             torch.cuda.empty_cache()
 
-            # 如果超过设定的epoch次数奖励都没有再提升，就停止训练
+            # 如果超过设定的epoch次数valid奖励都没有再提升，就停止训练
             if best_time >= wait_best_reward_epoch:
                 log_and_print("效果如下：", log_file_name)
-                for i in range(len(test_reward_list)):
+                for i in range(len(all_valid_reward_list)):
                     log_and_print("Epoch: {}\treward: {:.6f}\tuser_props: {:.6f}"
                                   "\tserver_props: {:.6f}\tcapacity_props: {:.6f}"
-                                  .format(i, test_reward_list[i], test_user_list[i],
-                                          test_server_list[i], test_capacity_list[i]),
+                                  .format(i, all_valid_reward_list[i], all_valid_user_list[i],
+                                          all_valid_server_list[i], all_valid_capacity_list[i]),
                                   log_file_name)
                 model_filename = model_dir_name + "/" + time.strftime(
                     '%m%d%H%M', time.localtime(time.time())
@@ -333,7 +358,9 @@ if __name__ == '__main__':
             if epoch % save_model_epoch_interval == save_model_epoch_interval - 1:
                 model_filename = model_dir_name + "/" + time.strftime(
                     '%m%d%H%M', time.localtime(time.time())
-                ) + "_{:.2f}_{:.2f}_{:.2f}".format(user_allo * 100, server_use * 100, capacity_use * 100) + '.mdl'
+                ) + "_{:.2f}_{:.2f}_{:.2f}".format(valid_user_allo * 100,
+                                                   valid_server_use * 100,
+                                                   valid_capacity_use * 100) + '.mdl'
                 if train_type == 'ac':
                     state = {'model': model.state_dict(), 'optimizer': optimizer.state_dict(), 'epoch': epoch,
                              'critic_model': critic_model.state_dict(),
