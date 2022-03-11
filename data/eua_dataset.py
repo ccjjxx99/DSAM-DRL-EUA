@@ -3,7 +3,7 @@ from torch.utils.data import Dataset
 from data.data_generator import DataGenerator
 
 
-class EuaDataset(Dataset):
+class EuaTrainDataset(Dataset):
     def __init__(self, servers, users_list, users_within_servers_list, users_masks_list, device):
         self.servers = torch.tensor(servers, dtype=torch.float32, device=device)
         self.users_list, self.users_within_servers_list, self.users_masks_list = \
@@ -39,14 +39,14 @@ def generate_three_set(user_num, data_num, x_start_prop, x_end_prop, y_start_pro
     servers = generator.init_server(x_start_prop, x_end_prop, y_start_prop, y_end_prop, min_cov, max_cov)
     users_list, users_within_servers_list, users_masks_list = \
         generator.init_users_list_by_server(servers, data_num[0], user_num, load_sorted=True, max_cov=max_cov)
-    train_set = EuaDataset(servers, users_list, users_within_servers_list, users_masks_list, device)
+    train_set = EuaTrainDataset(servers, users_list, users_within_servers_list, users_masks_list, device)
 
     users_list, users_within_servers_list, users_masks_list = \
         generator.init_users_list_by_server(servers, data_num[1], user_num, load_sorted=True, max_cov=max_cov)
-    valid_set = EuaDataset(servers, users_list, users_within_servers_list, users_masks_list, device)
+    valid_set = EuaTrainDataset(servers, users_list, users_within_servers_list, users_masks_list, device)
 
     users_list, users_within_servers_list, users_masks_list = \
         generator.init_users_list_by_server(servers, data_num[2], user_num, load_sorted=True, max_cov=max_cov)
-    test_set = EuaDataset(servers, users_list, users_within_servers_list, users_masks_list, device)
+    test_set = EuaTrainDataset(servers, users_list, users_within_servers_list, users_masks_list, device)
 
     return train_set, valid_set, test_set
