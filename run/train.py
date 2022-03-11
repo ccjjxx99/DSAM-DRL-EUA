@@ -229,6 +229,22 @@ if __name__ == '__main__':
                     server_used_props, capacity_used_props, user_allocate_list \
                     = model(user_seq, server_seq, masks)
 
+                if batch_idx % int(2048 / batch_size) == 0:
+                    log_and_print(
+                        '{} Epoch {}: Valid [{}/{} ({:.1f}%)]\tR:{:.6f}\tuser_props: {:.6f}'
+                        '\tserver_props: {:.6f}\tcapacity_props:{:.6f}'.format(
+                            time.strftime('%H:%M:%S', time.localtime(time.time())),
+                            epoch,
+                            (batch_idx + 1) * len(user_seq),
+                            valid_size,
+                            100. * (batch_idx + 1) / len(valid_loader),
+                            torch.mean(reward),
+                            torch.mean(user_allocated_props),
+                            torch.mean(server_used_props),
+                            torch.mean(capacity_used_props)
+                        ),
+                        log_file_name)
+
                 valid_R_list.append(reward)
                 valid_user_allocated_props_list.append(user_allocated_props)
                 valid_server_used_props_list.append(server_used_props)
@@ -242,7 +258,7 @@ if __name__ == '__main__':
             valid_user_allo = torch.mean(valid_user_allocated_props_list)
             valid_server_use = torch.mean(valid_server_used_props_list)
             valid_capacity_use = torch.mean(valid_capacity_used_props_list)
-            log_and_print('{} Epoch {}: Test \tR:{:.6f}\tuser_props: {:.6f}'
+            log_and_print('{} Epoch {}: Valid \tR:{:.6f}\tuser_props: {:.6f}'
                           '\tserver_props: {:.6f}\tcapacity_props:{:.6f}'
                           .format(time.strftime('%H:%M:%S', time.localtime(time.time())), epoch, valid_r,
                                   valid_user_allo, valid_server_use, valid_capacity_use),
@@ -295,12 +311,12 @@ if __name__ == '__main__':
 
                 if batch_idx % int(2048 / batch_size) == 0:
                     log_and_print(
-                        '{} Epoch {}: Valid [{}/{} ({:.1f}%)]\tR:{:.6f}\tuser_props: {:.6f}'
+                        '{} Epoch {}: Test [{}/{} ({:.1f}%)]\tR:{:.6f}\tuser_props: {:.6f}'
                         '\tserver_props: {:.6f}\tcapacity_props:{:.6f}'.format(
                             time.strftime('%H:%M:%S', time.localtime(time.time())),
                             epoch,
                             (batch_idx + 1) * len(user_seq),
-                            valid_size,
+                            test_size,
                             100. * (batch_idx + 1) / len(valid_loader),
                             torch.mean(reward),
                             torch.mean(user_allocated_props),
