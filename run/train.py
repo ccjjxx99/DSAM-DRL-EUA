@@ -36,9 +36,12 @@ if __name__ == '__main__':
     dropout = 0
     server_reward_rate = 0.1
     user_num = 200
-    resource_rate = 3
     x_end = 0.5
     y_end = 1
+    min_cov = 1
+    max_cov = 1.5
+    miu = 35
+    sigma = 10
     user_embedding_type = 'transformer'
     server_embedding_type = 'linear'
     # train_type = 'REINFORCE'
@@ -57,11 +60,11 @@ if __name__ == '__main__':
                               "02241521_server_0.4_0.5_user_200_rate_3/02241721_99.81_78.20_45.70.mdl"
 
     train_filename = "D:/transformer_eua/dataset/train_server_" + str(x_end) + "_" + str(y_end) + "_user_" \
-                     + str(user_num) + "_rate_" + str(resource_rate) + "_size_" + str(train_size) + ".pkl"
+                     + str(user_num) + "_miu_" + str(miu) + "_sigma_" + str(sigma) + "_size_" + str(train_size) + ".pkl"
     valid_filename = "D:/transformer_eua/dataset/valid_server_" + str(x_end) + "_" + str(y_end) + "_user_" \
-                     + str(user_num) + "_rate_" + str(resource_rate) + "_size_" + str(valid_size) + ".pkl"
+                     + str(user_num) + "_miu_" + str(miu) + "_sigma_" + str(sigma) + "_size_" + str(valid_size) + ".pkl"
     test_filename = "D:/transformer_eua/dataset/test_server_" + str(x_end) + "_" + str(y_end) + "_user_" \
-                    + str(user_num) + "_rate_" + str(resource_rate) + "_size_" + str(test_size) + ".pkl"
+                    + str(user_num) + "_miu_" + str(miu) + "_sigma_" + str(sigma) + "_size_" + str(test_size) + ".pkl"
 
     try:
         print("正在加载训练数据集")
@@ -77,7 +80,7 @@ if __name__ == '__main__':
         print("文件{}未找到，重新生成".format(e.filename))
         train_set, valid_set, test_set = \
             generate_three_set(user_num, (train_size, valid_size, test_size),
-                               0, x_end, 0, y_end, device, rate=resource_rate)
+                               0, x_end, 0, y_end, device, min_cov, max_cov, miu, sigma)
         with open(train_filename, 'wb') as f:
             pickle.dump(train_set, f)
             print("保存训练集成功")
@@ -119,11 +122,13 @@ if __name__ == '__main__':
 
     board_dir_name = "D:/transformer_eua/log/" + time.strftime('%m%d%H%M', time.localtime(time.time())) \
                      + "_server_" + str(x_end) + "_" + str(y_end) + "_user_" \
-                     + str(user_num) + "_rate_" + str(resource_rate)
+                     + str(user_num) + "_miu_" + str(miu) + "_sigma_" + str(sigma) + "_" + user_embedding_type + "_" \
+                     + server_embedding_type + "_" + train_type
     log_file_name = board_dir_name + '/log.log'
     model_dir_name = "D:/transformer_eua/model/" + time.strftime('%m%d%H%M', time.localtime(time.time())) \
                      + "_server_" + str(x_end) + "_" + str(y_end) + "_user_" \
-                     + str(user_num) + "_rate_" + str(resource_rate)
+                     + str(user_num) + "_miu_" + str(miu) + "_sigma_" + str(sigma) + "_" + user_embedding_type + "_" \
+                     + server_embedding_type + "_" + train_type
     os.makedirs(model_dir_name, exist_ok=True)
     os.makedirs(board_dir_name, exist_ok=True)
     tensorboard_writer = SummaryWriter(board_dir_name)

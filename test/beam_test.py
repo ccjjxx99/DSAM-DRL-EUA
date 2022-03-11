@@ -4,7 +4,7 @@ from nets.attention_net import PointerNet
 import pickle
 import time
 
-batch_size = 30
+batch_size = 16
 beam_num = 10
 use_cuda = True
 lr = 1e-4
