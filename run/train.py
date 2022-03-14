@@ -27,12 +27,12 @@ if __name__ == '__main__':
     seed_torch()
     batch_size = 256
     use_cuda = True
-    lr = 1e-4
+    lr = 3e-4
     beta = 0.9
     max_grad_norm = 2.
     epochs = 1000
     dropout = 0
-    server_reward_rate = 0.1
+    capacity_reward_rate = 0.2
     user_num = 200
     x_end = 0.5
     y_end = 1
@@ -92,7 +92,7 @@ if __name__ == '__main__':
     valid_loader = DataLoader(dataset=valid_set, batch_size=batch_size, shuffle=False)
     test_loader = DataLoader(dataset=test_set, batch_size=batch_size, shuffle=False)
 
-    model = PointerNet(6, 7, 256, device=device, dropout=dropout, server_reward_rate=server_reward_rate,
+    model = PointerNet(6, 7, 256, device=device, dropout=dropout, capacity_reward_rate=capacity_reward_rate,
                        user_embedding_type=user_embedding_type, server_embedding_type=server_embedding_type)
     optimizer = Adam(model.parameters(), lr=lr)
 

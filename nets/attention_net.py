@@ -101,7 +101,7 @@ class Attention(nn.Module):
 
 
 class PointerNet(nn.Module):
-    def __init__(self, user_input_dim, server_input_dim, hidden_dim, device, dropout=0.1, server_reward_rate=0.1,
+    def __init__(self, user_input_dim, server_input_dim, hidden_dim, device, capacity_reward_rate, dropout=0.1,
                  policy='sample', user_embedding_type='linear', server_embedding_type='linear', beam_num=1):
         super(PointerNet, self).__init__()
         # decoder hidden size
@@ -117,7 +117,7 @@ class PointerNet(nn.Module):
         self.glimpse = Glimpse(hidden_dim, hidden_dim, dropout=dropout).to(device)
         self.pointer = Attention(hidden_dim, dropout=dropout).to(device)
         self.sm = nn.Softmax(dim=1).to(device)
-        self.server_reward_rate = server_reward_rate
+        self.capacity_reward_rate = capacity_reward_rate
         self.policy = policy
         self.beam_num = beam_num
 
@@ -234,8 +234,8 @@ class PointerNet(nn.Module):
             self.calc_rewards(user_allocate_list, user_len, server_allocate_mat, server_len,
                               server_input_seq[:, :, 3:].clone(), batch_size, tmp_server_capacity)
 
-        return -(user_allocated_props + capacity_used_props), \
-               action_probs, action_idx, user_allocated_props, server_used_props, capacity_used_props, user_allocate_list
+        return -(user_allocated_props + self.capacity_reward_rate * capacity_used_props), action_probs, \
+            action_idx, user_allocated_props, server_used_props, capacity_used_props, user_allocate_list
 
     def beam_forward(self, user_input_seq, server_input_seq, masks):
         batch_size = user_input_seq.size(0)
@@ -381,8 +381,8 @@ class PointerNet(nn.Module):
         best_idxs = torch.gather(action_idxes, dim=1, index=indices)
         best_user_allocate_lists = torch.gather(user_allocate_lists, dim=1, index=indices)
 
-        return -(max_user_allo + max_capacity_use), \
-               action_probs_list, best_idxs, max_user_allo, max_server_use, max_capacity_use, best_user_allocate_lists
+        return -(max_user_allo + self.capacity_reward_rate * max_capacity_use), \
+            action_probs_list, best_idxs, max_user_allo, max_server_use, max_capacity_use, best_user_allocate_lists
 
 
 def can_allocate(workload: torch.Tensor, capacity: torch.Tensor):
