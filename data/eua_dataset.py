@@ -36,7 +36,7 @@ def generate_three_set(user_num, data_num, x_start_prop, x_end_prop, y_start_pro
     :return:
     """
     generator = DataGenerator()
-    servers = generator.init_server(x_start_prop, x_end_prop, y_start_prop, y_end_prop, min_cov, max_cov)
+    servers = generator.init_server(x_start_prop, x_end_prop, y_start_prop, y_end_prop, min_cov, max_cov, miu, sigma)
     users_list, users_within_servers_list, users_masks_list = \
         generator.init_users_list_by_server(servers, data_num[0], user_num, load_sorted=True, max_cov=max_cov)
     train_set = EuaTrainDataset(servers, users_list, users_within_servers_list, users_masks_list, device)

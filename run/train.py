@@ -38,7 +38,7 @@ if __name__ == '__main__':
     y_end = 1
     min_cov = 1
     max_cov = 1.5
-    miu = 35
+    miu = 45
     sigma = 10
     user_embedding_type = 'transformer'
     server_embedding_type = 'linear'
@@ -48,7 +48,7 @@ if __name__ == '__main__':
     train_size = 100000
     valid_size = 10000
     test_size = 10000
-    wait_best_reward_epoch = 20
+    wait_best_reward_epoch = 10
     save_model_epoch_interval = 10
     use_cuda = use_cuda and torch.cuda.is_available()
     device = torch.device("cuda:0" if use_cuda else "cpu")
@@ -292,10 +292,10 @@ if __name__ == '__main__':
                     best_server = valid_server_use
                     best_capacity = valid_capacity_use
                     best_time = 0
-                    log_and_print("目前本次reward最好", log_file_name)
+                    log_and_print("目前本次reward最好\n", log_file_name)
                 else:
                     best_time += 1
-                    log_and_print("已经有{}轮效果没变好了".format(best_time), log_file_name)
+                    log_and_print("已经有{}轮效果没变好了\n".format(best_time), log_file_name)
 
             # Test
             test_R_list = []

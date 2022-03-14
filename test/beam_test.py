@@ -4,8 +4,8 @@ from nets.attention_net import PointerNet
 import pickle
 import time
 
-batch_size = 16
-beam_num = 10
+batch_size = 32
+beam_num = 5
 use_cuda = True
 lr = 1e-4
 beta = 0.9
@@ -17,13 +17,12 @@ user_num = 200
 resource_rate = 3
 x_end = 0.5
 y_end = 1
+min_cov = 1
+max_cov = 1.5
+miu = 35
+sigma = 10
 user_embedding_type = 'transformer'
 server_embedding_type = 'linear'
-# train_type = 'REINFORCE'
-# train_type = 'ac'
-train_type = 'RGRB'
-train_size = 100000
-valid_size = 10000
 test_size = 10000
 wait_best_reward_epoch = 20
 save_model_epoch_interval = 10
@@ -31,7 +30,7 @@ use_cuda = use_cuda and torch.cuda.is_available()
 device = torch.device("cuda:0" if use_cuda else "cpu")
 
 test_filename = "D:/transformer_eua/dataset/test_server_" + str(x_end) + "_" + str(y_end) + "_user_" \
-                + str(user_num) + "_rate_" + str(resource_rate) + "_size_" + str(test_size) + ".pkl"
+                    + str(user_num) + "_miu_" + str(miu) + "_sigma_" + str(sigma) + "_size_" + str(test_size) + ".pkl"
 print("正在加载测试数据集")
 with open(test_filename, 'rb') as f:
     test_set = pickle.load(f)
@@ -40,12 +39,14 @@ print("正在加载模型")
 model = PointerNet(6, 7, 256, device=device, dropout=dropout, server_reward_rate=server_reward_rate,
                    user_embedding_type=user_embedding_type, server_embedding_type=server_embedding_type)
 
-model_filename = "D:/transformer_eua/model/03092254_server_0.5_1_user_200_rate_3/03101039_94.72_61.44_54.64.mdl"
+model_filename = "D:/transformer_eua/model/" \
+                 "03111924_server_0.5_1_user_200_miu_35_sigma_10_transformer_linear_RGRB/03122134_96.32_55.01_51.61.mdl"
 checkpoint = torch.load(model_filename)
 model.load_state_dict(checkpoint['model'])
 
 test_loader = DataLoader(dataset=test_set, batch_size=batch_size, shuffle=False)
 
+print("开始测试")
 # 测试beam_search的效果
 beam_R_list = []
 beam_user_allocated_props_list = []
@@ -67,7 +68,7 @@ for batch_idx, (server_seq, user_seq, masks) in enumerate(test_loader):
     print('{} Test [{}/{} ({:.1f}%)]\tR:{:.6f}\tuser_props: {:.6f}'
           '\tserver_props: {:.6f}\tcapacity_props:{:.6f}'.format(time.strftime('%H:%M:%S', time.localtime(time.time())),
                                                                  (batch_idx + 1) * len(user_seq),
-                                                                 train_size,
+                                                                 test_size,
                                                                  100. * (batch_idx + 1) / len(test_loader),
                                                                  torch.mean(reward),
                                                                  torch.mean(user_allocated_props),
