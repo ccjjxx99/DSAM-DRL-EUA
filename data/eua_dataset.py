@@ -20,7 +20,7 @@ class EuaTrainDataset(Dataset):
 
 
 def generate_three_set(user_num, data_num, x_start_prop, x_end_prop, y_start_prop, y_end_prop, device,
-                       min_cov=1, max_cov=1.5, miu=35, sigma=10):
+                       min_cov=1, max_cov=1.5, miu=35, sigma=10, servers=None):
     """
     :param user_num:
     :param data_num: 数组，包括训练、验证、测试三个数
@@ -33,10 +33,13 @@ def generate_three_set(user_num, data_num, x_start_prop, x_end_prop, y_start_pro
     :param max_cov:
     :param miu: 服务器容量的均值
     :param sigma: 服务器容量的方差
+    :param servers: 如果已经有服务器了就直接指定
     :return:
     """
     generator = DataGenerator()
-    servers = generator.init_server(x_start_prop, x_end_prop, y_start_prop, y_end_prop, min_cov, max_cov, miu, sigma)
+    if servers is None:
+        servers = generator.init_server(x_start_prop, x_end_prop, y_start_prop, y_end_prop,
+                                        min_cov, max_cov, miu, sigma)
     users_list, users_within_servers_list, users_masks_list = \
         generator.init_users_list_by_server(servers, data_num[0], user_num, load_sorted=True, max_cov=max_cov)
     train_set = EuaTrainDataset(servers, users_list, users_within_servers_list, users_masks_list, device)
@@ -49,4 +52,4 @@ def generate_three_set(user_num, data_num, x_start_prop, x_end_prop, y_start_pro
         generator.init_users_list_by_server(servers, data_num[2], user_num, load_sorted=True, max_cov=max_cov)
     test_set = EuaTrainDataset(servers, users_list, users_within_servers_list, users_masks_list, device)
 
-    return train_set, valid_set, test_set
+    return train_set, valid_set, test_set, servers

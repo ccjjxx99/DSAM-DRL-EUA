@@ -17,7 +17,7 @@ from data.eua_dataset import generate_three_set
 
 def seed_torch(seed=42):
     random.seed(seed)
-    os.environ['PYTHONHASHSEED'] = str(seed)    # 为了禁止hash随机化，使得实验可复现
+    os.environ['PYTHONHASHSEED'] = str(seed)  # 为了禁止hash随机化，使得实验可复现
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
@@ -33,12 +33,12 @@ if __name__ == '__main__':
     epochs = 1000
     dropout = 0
     capacity_reward_rate = 0.2
-    user_num = 200
+    user_num = 300
     x_end = 0.5
     y_end = 1
     min_cov = 1
     max_cov = 1.5
-    miu = 45
+    miu = 35
     sigma = 10
     user_embedding_type = 'transformer'
     server_embedding_type = 'linear'
@@ -53,8 +53,10 @@ if __name__ == '__main__':
     use_cuda = use_cuda and torch.cuda.is_available()
     device = torch.device("cuda:0" if use_cuda else "cpu")
 
-    need_continue = False
-    continue_model_filename = None
+    need_continue = True
+    continue_model_filename = r"D:\transformer_eua\model" \
+                              r"\03142102_server_0.5_1_user_200_miu_35_sigma_10_transformer_linear_RGRB_rate_0.2" \
+                              r"\03160100_97.61_59.00_48.95.mdl "
 
     train_filename = "D:/transformer_eua/dataset/train_server_" + str(x_end) + "_" + str(y_end) + "_user_" \
                      + str(user_num) + "_miu_" + str(miu) + "_sigma_" + str(sigma) + "_size_" + str(train_size) + ".pkl"
@@ -62,6 +64,8 @@ if __name__ == '__main__':
                      + str(user_num) + "_miu_" + str(miu) + "_sigma_" + str(sigma) + "_size_" + str(valid_size) + ".pkl"
     test_filename = "D:/transformer_eua/dataset/test_server_" + str(x_end) + "_" + str(y_end) + "_user_" \
                     + str(user_num) + "_miu_" + str(miu) + "_sigma_" + str(sigma) + "_size_" + str(test_size) + ".pkl"
+    server_filename = "D:/transformer_eua/dataset/server_" + str(x_end) + "_" + str(y_end) \
+                      + "_miu_" + str(miu) + "_sigma_" + str(sigma) + ".pkl"
 
     try:
         print("正在加载训练数据集")
@@ -75,12 +79,23 @@ if __name__ == '__main__':
             test_set = pickle.load(f)
     except FileNotFoundError as e:
         print("文件{}未找到，重新生成".format(e.filename))
-        train_set, valid_set, test_set = \
+        try:
+            with open(server_filename, 'rb') as f:
+                servers = pickle.load(f)
+            print("成功读取到原有服务器信息")
+        except FileNotFoundError as e2:
+            servers = None
+            print("未读取到原有服务器信息，重新生成")
+        train_set, valid_set, test_set, servers = \
             generate_three_set(user_num, (train_size, valid_size, test_size),
-                               0, x_end, 0, y_end, device, min_cov, max_cov, miu, sigma)
+                               0, x_end, 0, y_end, device, min_cov, max_cov, miu, sigma, servers)
+        with open(server_filename, 'wb') as f:
+            pickle.dump(servers, f)
+            print("服务器信息保存成功")
         with open(train_filename, 'wb') as f:
             pickle.dump(train_set, f)
             print("保存训练集成功")
+
         with open(valid_filename, 'wb') as f:
             pickle.dump(valid_set, f)
             print("保存验证集成功")
@@ -112,6 +127,8 @@ if __name__ == '__main__':
         if train_type == 'ac':
             critic_model.load_state_dict(checkpoint['critic_model'])
             critic_optimizer.load_state_dict(checkpoint['critic_optimizer'])
+
+        print("成功导入预训练模型")
     else:
         start_epoch = 0
 
@@ -120,12 +137,12 @@ if __name__ == '__main__':
     board_dir_name = "D:/transformer_eua/log/" + time.strftime('%m%d%H%M', time.localtime(time.time())) \
                      + "_server_" + str(x_end) + "_" + str(y_end) + "_user_" \
                      + str(user_num) + "_miu_" + str(miu) + "_sigma_" + str(sigma) + "_" + user_embedding_type + "_" \
-                     + server_embedding_type + "_" + train_type
+                     + server_embedding_type + "_" + train_type + "_capa_rate_" + str(capacity_reward_rate)
     log_file_name = board_dir_name + '/log.log'
     model_dir_name = "D:/transformer_eua/model/" + time.strftime('%m%d%H%M', time.localtime(time.time())) \
                      + "_server_" + str(x_end) + "_" + str(y_end) + "_user_" \
                      + str(user_num) + "_miu_" + str(miu) + "_sigma_" + str(sigma) + "_" + user_embedding_type + "_" \
-                     + server_embedding_type + "_" + train_type
+                     + server_embedding_type + "_" + train_type + "_capa_rate_" + str(capacity_reward_rate)
     os.makedirs(model_dir_name, exist_ok=True)
     os.makedirs(board_dir_name, exist_ok=True)
     tensorboard_writer = SummaryWriter(board_dir_name)
