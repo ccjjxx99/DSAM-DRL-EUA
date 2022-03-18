@@ -11,8 +11,9 @@ import torch.nn.functional as F
 
 from nets.attention_net import PointerNet
 from nets.attention_net import CriticNet
-from util.utils import log_and_print
-from data.data_generator import generate_three_set
+from util.utils import log_and_print, save_dataset
+from data.data_generator import init_server, init_users_list_by_server
+from data.eua_dataset import EuaDataset
 
 
 def seed_torch(seed=42):
@@ -33,7 +34,7 @@ if __name__ == '__main__':
     epochs = 1000
     dropout = 0
     capacity_reward_rate = 0.2
-    user_num = 300
+    user_num = 200
     x_end = 0.5
     y_end = 1
     min_cov = 1
@@ -45,64 +46,53 @@ if __name__ == '__main__':
     # train_type = 'REINFORCE'
     # train_type = 'ac'
     train_type = 'RGRB'
-    train_size = 100000
-    valid_size = 10000
-    test_size = 10000
+    train_size = 10
+    valid_size = 10
+    test_size = 10
     wait_best_reward_epoch = 10
     save_model_epoch_interval = 10
     use_cuda = use_cuda and torch.cuda.is_available()
     device = torch.device("cuda:0" if use_cuda else "cpu")
 
-    need_continue = True
-    continue_model_filename = r"D:\transformer_eua\model" \
-                              r"\03142102_server_0.5_1_user_200_miu_35_sigma_10_transformer_linear_RGRB_rate_0.2" \
-                              r"\03160100_97.61_59.00_48.95.mdl "
+    need_continue = False
+    continue_model_filename = None
 
-    train_filename = "D:/transformer_eua/dataset/train_server_" + str(x_end) + "_" + str(y_end) + "_user_" \
-                     + str(user_num) + "_miu_" + str(miu) + "_sigma_" + str(sigma) + "_size_" + str(train_size) + ".pkl"
-    valid_filename = "D:/transformer_eua/dataset/valid_server_" + str(x_end) + "_" + str(y_end) + "_user_" \
-                     + str(user_num) + "_miu_" + str(miu) + "_sigma_" + str(sigma) + "_size_" + str(valid_size) + ".pkl"
-    test_filename = "D:/transformer_eua/dataset/test_server_" + str(x_end) + "_" + str(y_end) + "_user_" \
-                    + str(user_num) + "_miu_" + str(miu) + "_sigma_" + str(sigma) + "_size_" + str(test_size) + ".pkl"
-    server_filename = "D:/transformer_eua/dataset/server_" + str(x_end) + "_" + str(y_end) \
-                      + "_miu_" + str(miu) + "_sigma_" + str(sigma) + ".pkl"
+    dataset_dir_name = "D:/transformer_eua/dataset/server_" + str(x_end) + "_" + str(y_end) \
+                       + "_miu_" + str(miu) + "_sigma_" + str(sigma)
+    server_file_name = "server_" + str(x_end) + "_" + str(y_end) + "_miu_" + str(miu) + "_sigma_" + str(sigma)
+    server_path = os.path.join(dataset_dir_name, server_file_name) + '.npy'
 
-    try:
-        print("正在加载训练数据集")
-        with open(train_filename, 'rb') as f:
-            train_set = pickle.load(f)
-        print("正在加载验证数据集")
-        with open(valid_filename, 'rb') as f:
-            valid_set = pickle.load(f)
-        print("正在加载测试数据集")
-        with open(test_filename, 'rb') as f:
-            test_set = pickle.load(f)
-    except FileNotFoundError as e:
-        print("文件{}未找到，重新生成".format(e.filename))
-        try:
-            with open(server_filename, 'rb') as f:
-                servers = pickle.load(f)
-            print("成功读取到原有服务器信息")
-        except FileNotFoundError as e2:
-            servers = None
-            print("未读取到原有服务器信息，重新生成")
-        train_set, valid_set, test_set, servers = \
-            generate_three_set(user_num, (train_size, valid_size, test_size),
-                               0, x_end, 0, y_end, device, min_cov, max_cov, miu, sigma, servers)
-        with open(server_filename, 'wb') as f:
-            pickle.dump(servers, f)
-            print("服务器信息保存成功")
-        with open(train_filename, 'wb') as f:
-            pickle.dump(train_set, f)
-            print("保存训练集成功")
+    train_filename = "train_user_" + str(user_num) + "_size_" + str(train_size)
+    valid_filename = "valid_user_" + str(user_num) + "_size_" + str(train_size)
+    test_filename = "test_user_" + str(user_num) + "_size_" + str(train_size)
 
-        with open(valid_filename, 'wb') as f:
-            pickle.dump(valid_set, f)
-            print("保存验证集成功")
-        with open(test_filename, 'wb') as f:
-            pickle.dump(test_set, f)
-            print("保存测试集成功")
-
+    path = {'train': os.path.join(dataset_dir_name, train_filename) + '.npz',
+            'valid': os.path.join(dataset_dir_name, valid_filename) + '.npz',
+            'test': os.path.join(dataset_dir_name, test_filename) + '.npz'}
+    set_types = ['train', 'valid', 'test']
+    # 判断目录是否存在
+    if os.path.exists(server_path):
+        servers = np.load(server_path)
+        print("读取服务器数据成功")
+    else:
+        print("未读取到服务器数据，重新生成")
+        os.makedirs(dataset_dir_name)
+        servers = init_server(0, x_end, 0, y_end, min_cov, max_cov, miu, sigma)
+        np.save(server_path, servers)
+    datas = []
+    for set_type in set_types:
+        if os.path.exists(path[set_type]):
+            print("正在加载", set_type, "数据集")
+            data = np.load(path[set_type])
+            datas.append(data)
+        else:
+            print(set_type, "数据集未找到，重新生成")
+            data = init_users_list_by_server(servers, train_size, user_num, True, max_cov)
+            datas.append(data)
+            save_dataset(path[set_type], **data)
+    train_set = EuaDataset(servers, **datas[0], device=device)
+    valid_set = EuaDataset(servers, **datas[1], device=device)
+    test_set = EuaDataset(servers, **datas[2], device=device)
     train_loader = DataLoader(dataset=train_set, batch_size=batch_size, shuffle=True)
     valid_loader = DataLoader(dataset=valid_set, batch_size=batch_size, shuffle=False)
     test_loader = DataLoader(dataset=test_set, batch_size=batch_size, shuffle=False)

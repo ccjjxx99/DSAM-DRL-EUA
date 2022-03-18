@@ -21,7 +21,7 @@ class EuaTrainDataset(Dataset):
 class EuaDataset(Dataset):
     def __init__(self, servers, users_list, users_masks_list, device):
         self.servers, self.users_list, self.users_masks_list = servers, users_list, users_masks_list
-        self.servers_tensor = torch.tensor(servers, dtype=torch.float32, device=self.device)
+        self.servers_tensor = torch.tensor(servers, dtype=torch.float32, device=device)
         self.device = device
 
     def __len__(self):

@@ -219,106 +219,66 @@ def miller_to_xy(lon, lat):
     return x, y
 
 
-class DataGenerator:
-
-    def __init__(self):
-        self.server_xy_list = get_all_server_xy()
-        self.max_x_y = np.max(self.server_xy_list, axis=0)
-        self.max_x = self.max_x_y[0]
-        self.max_y = self.max_x_y[1]
-
-    def init_server(self, x_start_prop, x_end_prop, y_start_prop, y_end_prop,
-                    min_cov=1, max_cov=1.5, miu=35, sigma=10):
-        """
-        根据比例从地图中截取一些服务器的坐标
-        """
-        x_start = self.max_x * x_start_prop
-        x_end = self.max_x * x_end_prop
-        y_start = self.max_y * y_start_prop
-        y_end = self.max_y * y_end_prop
-        filter_server = [x_start <= server[0] <= x_end
-                         and y_start <= server[1] <= y_end
-                         for server in self.server_xy_list]
-        server_xy_list = self.server_xy_list[filter_server]
-        # 将这些服务器最左上角定义为(0,0)+覆盖范围
-        min_xy = np.min(server_xy_list, axis=0)
-        server_xy_list = server_xy_list - min_xy + max_cov
-        server_cov_list = np.random.uniform(min_cov, max_cov, (len(server_xy_list), 1))
-        server_capacity_list = np.random.normal(miu, sigma, size=(len(server_xy_list), 4))
-        server_list = np.concatenate((server_xy_list, server_cov_list, server_capacity_list), axis=1)
-        return server_list
-
-    @staticmethod
-    def init_users_list_by_server(server_list, data_num, user_num, load_sorted=True, max_cov=1.5):
-        """
-        固定服务器坐标，生成一组user，同时补充服务器的资源容量
-        :param server_list:
-        :param data_num: 生成多少组
-        :param user_num: 用户数
-        :param max_cov: 最大覆盖半径，给左上角坐标加上，以免用户只能在左上角第一个服务器的右下角1/4的范围内生成
-        :param load_sorted: 是否直接生成已按load排序的用户
-        :return:
-        """
-        max_server = np.max(server_list, axis=0)
-        max_x = max_server[0] + max_cov
-        max_y = max_server[1] + max_cov
-        min_server = np.min(server_list, axis=0)
-        min_x = min_server[0] - max_cov
-        min_y = min_server[1] - max_cov
-
-        users_list = []
-        users_masks_list = []
-        for _ in tqdm(range(data_num)):
-            user_x_list = np.random.uniform(min_x, max_x, (user_num, 1))
-            user_y_list = np.random.uniform(min_y, max_y, (user_num, 1))
-            if load_sorted:
-                num01 = int(1 / 3 * user_num)
-                num2 = user_num - 2 * num01
-                w0 = np.tile(workload_list[0], (num01, 1))
-                w1 = np.tile(workload_list[1], (num01, 1))
-                w2 = np.tile(workload_list[2], (num2, 1))
-                user_load_list = np.concatenate((w0, w1, w2), axis=0)
-            else:
-                user_load_list = np.array([random_user_load() for _ in range(user_num)])
-            user_list = np.concatenate((user_x_list, user_y_list, user_load_list), axis=1)
-            user_list, users_masks = get_within_servers(user_list, server_list, min_x, max_x, min_y, max_y)
-            users_list.append(user_list)
-            users_masks_list.append(users_masks)
-
-        return users_list, users_masks_list
-
-
-def generate_three_set(user_num, data_num, x_start_prop, x_end_prop, y_start_prop, y_end_prop, device,
-                       min_cov=1, max_cov=1.5, miu=35, sigma=10, servers=None):
+def init_server(x_start_prop, x_end_prop, y_start_prop, y_end_prop,
+                min_cov=1, max_cov=1.5, miu=35, sigma=10):
     """
-    :param user_num:
-    :param data_num: 数组，包括训练、验证、测试三个数
-    :param x_start_prop:
-    :param x_end_prop:
-    :param y_start_prop:
-    :param y_end_prop:
-    :param device:
-    :param min_cov:
-    :param max_cov:
-    :param miu: 服务器容量的均值
-    :param sigma: 服务器容量的方差
-    :param servers: 如果已经有服务器了就直接指定
+    根据比例从地图中截取一些服务器的坐标
+    """
+    server_xy_list = get_all_server_xy()
+    max_x_y = np.max(server_xy_list, axis=0)
+    max_x = max_x_y[0]
+    max_y = max_x_y[1]
+    x_start = max_x * x_start_prop
+    x_end = max_x * x_end_prop
+    y_start = max_y * y_start_prop
+    y_end = max_y * y_end_prop
+    filter_server = [x_start <= server[0] <= x_end
+                     and y_start <= server[1] <= y_end
+                     for server in server_xy_list]
+    server_xy_list = server_xy_list[filter_server]
+    # 将这些服务器最左上角定义为(0,0)+覆盖范围
+    min_xy = np.min(server_xy_list, axis=0)
+    server_xy_list = server_xy_list - min_xy + max_cov
+    server_cov_list = np.random.uniform(min_cov, max_cov, (len(server_xy_list), 1))
+    server_capacity_list = np.random.normal(miu, sigma, size=(len(server_xy_list), 4))
+    server_list = np.concatenate((server_xy_list, server_cov_list, server_capacity_list), axis=1)
+    return server_list
+
+
+def init_users_list_by_server(server_list, data_num, user_num, load_sorted=True, max_cov=1.5):
+    """
+    固定服务器坐标，生成一组user，同时补充服务器的资源容量
+    :param server_list:
+    :param data_num: 生成多少组
+    :param user_num: 用户数
+    :param max_cov: 最大覆盖半径，给左上角坐标加上，以免用户只能在左上角第一个服务器的右下角1/4的范围内生成
+    :param load_sorted: 是否直接生成已按load排序的用户
     :return:
     """
-    generator = DataGenerator()
-    if servers is None:
-        servers = generator.init_server(x_start_prop, x_end_prop, y_start_prop, y_end_prop,
-                                        min_cov, max_cov, miu, sigma)
-    users_list, users_masks_list = generator.init_users_list_by_server(servers, data_num[0], user_num,
-                                                                       load_sorted=True, max_cov=max_cov)
-    train_set = EuaDataset(servers, users_list, users_masks_list, device)
+    max_server = np.max(server_list, axis=0)
+    max_x = max_server[0] + max_cov
+    max_y = max_server[1] + max_cov
+    min_server = np.min(server_list, axis=0)
+    min_x = min_server[0] - max_cov
+    min_y = min_server[1] - max_cov
 
-    users_list,  users_masks_list = generator.init_users_list_by_server(servers, data_num[1], user_num,
-                                                                        load_sorted=True, max_cov=max_cov)
-    valid_set = EuaDataset(servers, users_list, users_masks_list, device)
+    users_list = []
+    users_masks_list = []
+    for _ in tqdm(range(data_num)):
+        user_x_list = np.random.uniform(min_x, max_x, (user_num, 1))
+        user_y_list = np.random.uniform(min_y, max_y, (user_num, 1))
+        if load_sorted:
+            num01 = int(1 / 3 * user_num)
+            num2 = user_num - 2 * num01
+            w0 = np.tile(workload_list[0], (num01, 1))
+            w1 = np.tile(workload_list[1], (num01, 1))
+            w2 = np.tile(workload_list[2], (num2, 1))
+            user_load_list = np.concatenate((w0, w1, w2), axis=0)
+        else:
+            user_load_list = np.array([random_user_load() for _ in range(user_num)])
+        user_list = np.concatenate((user_x_list, user_y_list, user_load_list), axis=1)
+        user_list, users_masks = get_within_servers(user_list, server_list, min_x, max_x, min_y, max_y)
+        users_list.append(user_list)
+        users_masks_list.append(users_masks)
 
-    users_list, users_masks_list = generator.init_users_list_by_server(servers, data_num[2], user_num,
-                                                                       load_sorted=True, max_cov=max_cov)
-    test_set = EuaDataset(servers, users_list, users_masks_list, device)
-
-    return train_set, valid_set, test_set, servers
+    return {"users_list": users_list, "users_masks_list": users_masks_list}

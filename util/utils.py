@@ -1,14 +1,10 @@
 import copy
-import logging
-from datetime import datetime
 
 import numpy as np
 import torch
 from numpy import mean
 from torch.utils.data import DataLoader
 from tqdm import trange, tqdm
-
-from util.EUA_MCF import EUA_MCF
 
 
 def log_and_print(log_str, log_filename):
@@ -34,7 +30,6 @@ def get_reward(original_servers, users, actions):
     server_num = len(original_servers)
     # 每个用户被分配到的服务器
     user_allocate_list = [-1] * user_num
-    fake_allocate_list = [-1] * user_num
     # 每个服务器分配到的用户数量
     server_allocate_num = [0] * server_num
 
@@ -78,7 +73,7 @@ def get_reward(original_servers, users, actions):
     return user_allocate_list, server_allocate_num, user_allocated_prop, server_used_prop, capacity_used_prop
 
 
-def calc_mcf_reward_by_test_set(test_set):
+def calc_method_reward_by_test_set(test_set, method):
     servers = test_set.servers
     users_list, users_masks_list = test_set.users_list, test_set.users_masks_list
 
@@ -86,7 +81,7 @@ def calc_mcf_reward_by_test_set(test_set):
     server_props = []
     capacity_props = []
     for i in trange(len(test_set)):
-        _, _, _, _, user_allocated_prop, server_used_prop, capacity_prop = EUA_MCF(servers, users_list[i],
+        _, _, _, _, user_allocated_prop, server_used_prop, capacity_prop = method(servers, users_list[i],
                                                                                    users_masks_list[i])
         user_props.append(user_allocated_prop)
         server_props.append(server_used_prop)
@@ -117,12 +112,12 @@ def test_by_model_and_set(model, batch_size, test_set, device):
             test_server_used_props_list.append(server_used_props)
             test_capacity_used_props_list.append(capacity_used_props)
 
-        test_R_list = torch.cat(test_R_list)
+        # test_R_list = torch.cat(test_R_list)
         test_user_allocated_props_list = torch.cat(test_user_allocated_props_list)
         test_server_used_props_list = torch.cat(test_server_used_props_list)
         test_capacity_used_props_list = torch.cat(test_capacity_used_props_list)
 
-        test_r = torch.mean(test_R_list)
+        # test_r = torch.mean(test_R_list)
         test_user_allo = torch.mean(test_user_allocated_props_list)
         test_server_use = torch.mean(test_server_used_props_list)
         test_capacity_use = torch.mean(test_capacity_used_props_list)
@@ -137,3 +132,8 @@ def mask_trans_to_list(user_masks, server_num):
         y = server_arrange[mask]
         x.append(y.tolist())
     return x
+
+
+def save_dataset(save_filename, **train_data):
+    np.savez_compressed(save_filename, **train_data)
+    print(save_filename + "保存成功")
