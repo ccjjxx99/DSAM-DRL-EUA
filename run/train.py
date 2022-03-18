@@ -1,5 +1,4 @@
 import os
-import pickle
 import time
 import random
 import numpy as np
@@ -34,7 +33,7 @@ if __name__ == '__main__':
     epochs = 1000
     dropout = 0
     capacity_reward_rate = 0.2
-    user_num = 200
+    user_num = 300
     x_end = 0.5
     y_end = 1
     min_cov = 1
@@ -43,28 +42,30 @@ if __name__ == '__main__':
     sigma = 10
     user_embedding_type = 'transformer'
     server_embedding_type = 'linear'
-    # train_type = 'REINFORCE'
-    # train_type = 'ac'
     train_type = 'RGRB'
-    train_size = 10
-    valid_size = 10
-    test_size = 10
+    data_size = {
+        'train': 100000,
+        'valid': 10000,
+        'test': 10000
+    }
     wait_best_reward_epoch = 10
     save_model_epoch_interval = 10
     use_cuda = use_cuda and torch.cuda.is_available()
     device = torch.device("cuda:0" if use_cuda else "cpu")
 
-    need_continue = False
-    continue_model_filename = None
+    need_continue = True
+    continue_model_filename = "D:/transformer_eua/model/" \
+                              "03142102_server_0.5_1_user_200_miu_35_sigma_10_transformer_linear_RGRB_capa_rate_0.2/" \
+                              "03160100_97.61_59.00_48.95.mdl"
 
     dataset_dir_name = "D:/transformer_eua/dataset/server_" + str(x_end) + "_" + str(y_end) \
                        + "_miu_" + str(miu) + "_sigma_" + str(sigma)
     server_file_name = "server_" + str(x_end) + "_" + str(y_end) + "_miu_" + str(miu) + "_sigma_" + str(sigma)
     server_path = os.path.join(dataset_dir_name, server_file_name) + '.npy'
 
-    train_filename = "train_user_" + str(user_num) + "_size_" + str(train_size)
-    valid_filename = "valid_user_" + str(user_num) + "_size_" + str(train_size)
-    test_filename = "test_user_" + str(user_num) + "_size_" + str(train_size)
+    train_filename = "train_user_" + str(user_num) + "_size_" + str(data_size['train'])
+    valid_filename = "valid_user_" + str(user_num) + "_size_" + str(data_size['valid'])
+    test_filename = "test_user_" + str(user_num) + "_size_" + str(data_size['test'])
 
     path = {'train': os.path.join(dataset_dir_name, train_filename) + '.npz',
             'valid': os.path.join(dataset_dir_name, valid_filename) + '.npz',
@@ -87,7 +88,7 @@ if __name__ == '__main__':
             datas.append(data)
         else:
             print(set_type, "数据集未找到，重新生成")
-            data = init_users_list_by_server(servers, train_size, user_num, True, max_cov)
+            data = init_users_list_by_server(servers, data_size[set_type], user_num, True, max_cov)
             datas.append(data)
             save_dataset(path[set_type], **data)
     train_set = EuaDataset(servers, **datas[0], device=device)
@@ -204,7 +205,7 @@ if __name__ == '__main__':
                         time.strftime('%H:%M:%S', time.localtime(time.time())),
                         epoch,
                         (batch_idx + 1) * len(user_seq),
-                        train_size,
+                        data_size['train'],
                         100. * (batch_idx + 1) / len(train_loader),
                         torch.mean(reward),
                         torch.mean(user_allocated_props),
@@ -243,7 +244,7 @@ if __name__ == '__main__':
                             time.strftime('%H:%M:%S', time.localtime(time.time())),
                             epoch,
                             (batch_idx + 1) * len(user_seq),
-                            valid_size,
+                            data_size['valid'],
                             100. * (batch_idx + 1) / len(valid_loader),
                             torch.mean(reward),
                             torch.mean(user_allocated_props),
@@ -323,7 +324,7 @@ if __name__ == '__main__':
                             time.strftime('%H:%M:%S', time.localtime(time.time())),
                             epoch,
                             (batch_idx + 1) * len(user_seq),
-                            test_size,
+                            data_size['test'],
                             100. * (batch_idx + 1) / len(valid_loader),
                             torch.mean(reward),
                             torch.mean(user_allocated_props),
