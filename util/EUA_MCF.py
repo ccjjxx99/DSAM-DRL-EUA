@@ -1,6 +1,7 @@
 import copy
-
 import numpy as np
+
+from util.utils import mask_trans_to_list
 
 
 def can_allocate(workload, capacity):
@@ -10,10 +11,11 @@ def can_allocate(workload, capacity):
     return True
 
 
-def EUA_MCF(original_servers, original_users, user_within_servers):
+def EUA_MCF(original_servers, original_users, user_masks):
     users = sorted(original_users, key=lambda u: u[2])
     user_num = len(users)
     server_num = len(original_servers)
+    user_within_servers = mask_trans_to_list(user_masks, server_num)
     # 每个用户被分配到的服务器
     user_allocate_list = [-1] * user_num
     fake_allocate_list = [-1] * user_num

@@ -12,7 +12,7 @@ import torch.nn.functional as F
 from nets.attention_net import PointerNet
 from nets.attention_net import CriticNet
 from util.utils import log_and_print
-from data.eua_dataset import generate_three_set
+from data.data_generator import generate_three_set
 
 
 def seed_torch(seed=42):

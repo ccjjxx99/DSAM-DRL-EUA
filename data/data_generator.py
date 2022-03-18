@@ -5,6 +5,8 @@ from matplotlib import pyplot as plt
 from matplotlib.patches import Circle
 from tqdm import tqdm
 
+from data.eua_dataset import EuaDataset
+
 workload_list = [
     np.array([1, 2, 1, 2]),
     np.array([2, 3, 3, 4]),
@@ -25,28 +27,24 @@ def get_within_servers(user_list, server_list, x_start, x_end, y_start, y_end):
     获取用户被哪些服务器覆盖，如果没有覆盖，则重新生成一个用户
     :return: 重新生成的用户列表；用户覆盖的服务器id
     """
-    users_within_servers = []
-    users_masks = np.zeros((len(user_list), len(server_list)))
+    users_masks = np.zeros((len(user_list), len(server_list)), dtype=np.bool)
 
     def calc_user_within(calc_user, index):
-        this_user_within = []
+        flag = False
         for j in range(len(server_list)):
             if in_coverage(calc_user, server_list[j]):
-                this_user_within.append(j)
                 users_masks[index, j] = 1
-        return this_user_within
+                flag = True
+        return flag
 
     for i in range(len(user_list)):
         user = user_list[i]
         user_within = calc_user_within(user, i)
-        while len(user_within) == 0:
+        while not user_within:
             user[0] = random.random() * (x_end - x_start) + x_start
             user[1] = random.random() * (y_end - y_start) + y_start
             user_within = calc_user_within(user, i)
-        else:
-            users_within_servers.append(user_within)
-
-    return user_list, users_within_servers, users_masks
+    return user_list, users_masks
 
 
 def get_whole_capacity(user_list, rate):
@@ -269,7 +267,6 @@ class DataGenerator:
         min_y = min_server[1] - max_cov
 
         users_list = []
-        users_within_servers_list = []
         users_masks_list = []
         for _ in tqdm(range(data_num)):
             user_x_list = np.random.uniform(min_x, max_x, (user_num, 1))
@@ -284,10 +281,44 @@ class DataGenerator:
             else:
                 user_load_list = np.array([random_user_load() for _ in range(user_num)])
             user_list = np.concatenate((user_x_list, user_y_list, user_load_list), axis=1)
-            user_list, users_within_servers, users_masks = get_within_servers(user_list, server_list, min_x, max_x,
-                                                                              min_y, max_y)
+            user_list, users_masks = get_within_servers(user_list, server_list, min_x, max_x, min_y, max_y)
             users_list.append(user_list)
-            users_within_servers_list.append(users_within_servers)
             users_masks_list.append(users_masks)
 
-        return users_list, users_within_servers_list, users_masks_list
+        return users_list, users_masks_list
+
+
+def generate_three_set(user_num, data_num, x_start_prop, x_end_prop, y_start_prop, y_end_prop, device,
+                       min_cov=1, max_cov=1.5, miu=35, sigma=10, servers=None):
+    """
+    :param user_num:
+    :param data_num: 数组，包括训练、验证、测试三个数
+    :param x_start_prop:
+    :param x_end_prop:
+    :param y_start_prop:
+    :param y_end_prop:
+    :param device:
+    :param min_cov:
+    :param max_cov:
+    :param miu: 服务器容量的均值
+    :param sigma: 服务器容量的方差
+    :param servers: 如果已经有服务器了就直接指定
+    :return:
+    """
+    generator = DataGenerator()
+    if servers is None:
+        servers = generator.init_server(x_start_prop, x_end_prop, y_start_prop, y_end_prop,
+                                        min_cov, max_cov, miu, sigma)
+    users_list, users_masks_list = generator.init_users_list_by_server(servers, data_num[0], user_num,
+                                                                       load_sorted=True, max_cov=max_cov)
+    train_set = EuaDataset(servers, users_list, users_masks_list, device)
+
+    users_list,  users_masks_list = generator.init_users_list_by_server(servers, data_num[1], user_num,
+                                                                        load_sorted=True, max_cov=max_cov)
+    valid_set = EuaDataset(servers, users_list, users_masks_list, device)
+
+    users_list, users_masks_list = generator.init_users_list_by_server(servers, data_num[2], user_num,
+                                                                       load_sorted=True, max_cov=max_cov)
+    test_set = EuaDataset(servers, users_list, users_masks_list, device)
+
+    return train_set, valid_set, test_set, servers

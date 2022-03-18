@@ -79,16 +79,15 @@ def get_reward(original_servers, users, actions):
 
 
 def calc_mcf_reward_by_test_set(test_set):
-    servers = test_set.servers.cpu().numpy()
-    users_list, users_within_servers_list, users_masks_list = \
-        test_set.users_list, test_set.users_within_servers_list, test_set.users_masks_list
+    servers = test_set.servers
+    users_list, users_masks_list = test_set.users_list, test_set.users_masks_list
 
     user_props = []
     server_props = []
     capacity_props = []
     for i in trange(len(test_set)):
         _, _, _, _, user_allocated_prop, server_used_prop, capacity_prop = EUA_MCF(servers, users_list[i],
-                                                                                   users_within_servers_list[i])
+                                                                                   users_masks_list[i])
         user_props.append(user_allocated_prop)
         server_props.append(server_used_prop)
         capacity_props.append(capacity_prop)
@@ -128,3 +127,13 @@ def test_by_model_and_set(model, batch_size, test_set, device):
         test_server_use = torch.mean(test_server_used_props_list)
         test_capacity_use = torch.mean(test_capacity_used_props_list)
         print('Ptr:\t', test_user_allo.item(), test_server_use.item(), test_capacity_use.item())
+
+
+def mask_trans_to_list(user_masks, server_num):
+    x = []
+    server_arrange = np.arange(server_num)
+    for i in range(len(user_masks)):
+        mask = user_masks[i]
+        y = server_arrange[mask]
+        x.append(y.tolist())
+    return x

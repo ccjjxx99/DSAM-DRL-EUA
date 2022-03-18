@@ -1,5 +1,7 @@
 import copy
 
+from util.utils import mask_trans_to_list
+
 
 def can_allocate(workload, capacity):
     for i in range(len(workload)):
@@ -8,10 +10,10 @@ def can_allocate(workload, capacity):
     return True
 
 
-def greedy_allocate(servers, users, user_within_servers):
-
+def greedy_allocate(servers, users, user_masks):
     user_num = len(users)
     server_num = len(servers)
+    user_within_servers = mask_trans_to_list(user_masks, server_num)
     # 每个用户被分配到的服务器
     user_allocate_list = [-1] * user_num
     # 每个服务器分配到的用户数量
