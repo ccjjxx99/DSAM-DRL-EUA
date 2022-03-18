@@ -135,5 +135,6 @@ def mask_trans_to_list(user_masks, server_num):
 
 
 def save_dataset(save_filename, **train_data):
+    print("开始保存数据集至：", save_filename)
     np.savez_compressed(save_filename, **train_data)
-    print(save_filename + "保存成功")
+    print("保存成功")
