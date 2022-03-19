@@ -1,21 +1,14 @@
 import copy
+import logging
+import os
+import random
+import sys
 
 import numpy as np
 import torch
 from numpy import mean
 from torch.utils.data import DataLoader
 from tqdm import trange, tqdm
-
-
-def log_and_print(log_str, log_filename):
-    print(log_str)
-    try:
-        with open(log_filename, "a+", encoding='utf8') as ff:
-            ff.write(log_str + '\n')
-    except OSError as e:
-        print(e)
-    except Exception as e:
-        print(e)
 
 
 def can_allocate(workload, capacity):
@@ -82,7 +75,7 @@ def calc_method_reward_by_test_set(test_set, method):
     capacity_props = []
     for i in trange(len(test_set)):
         _, _, _, _, user_allocated_prop, server_used_prop, capacity_prop = method(servers, users_list[i],
-                                                                                   users_masks_list[i])
+                                                                                  users_masks_list[i])
         user_props.append(user_allocated_prop)
         server_props.append(server_used_prop)
         capacity_props.append(capacity_prop)
@@ -138,3 +131,34 @@ def save_dataset(save_filename, **train_data):
     print("开始保存数据集至：", save_filename)
     np.savez_compressed(save_filename, **train_data)
     print("保存成功")
+
+
+def seed_torch(seed=42):
+    random.seed(seed)
+    os.environ['PYTHONHASHSEED'] = str(seed)  # 为了禁止hash随机化，使得实验可复现
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+
+
+def get_logger(log_filename):
+    new_logger = logging.getLogger()
+    new_logger.setLevel(logging.DEBUG)
+    formatter = logging.Formatter(
+        '%(asctime)s: - %(message)s',
+        datefmt='%m-%d %H:%M:%S')
+
+    # 使用FileHandler输出到文件
+    fh = logging.FileHandler(log_filename)
+    fh.setLevel(logging.DEBUG)
+    fh.setFormatter(formatter)
+
+    # 使用StreamHandler输出到屏幕
+    ch = logging.StreamHandler(stream=sys.stdout)
+    ch.setLevel(logging.DEBUG)
+    ch.setFormatter(formatter)
+
+    # 添加两个Handler
+    new_logger.addHandler(ch)
+    new_logger.addHandler(fh)
+    return new_logger

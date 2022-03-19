@@ -1,6 +1,5 @@
 import os
 import time
-import random
 import numpy as np
 import torch
 from torch.optim import Adam
@@ -10,22 +9,14 @@ import torch.nn.functional as F
 
 from nets.attention_net import PointerNet
 from nets.attention_net import CriticNet
-from util.utils import log_and_print, save_dataset
+from util.utils import save_dataset, seed_torch, get_logger
 from data.data_generator import init_server, init_users_list_by_server
 from data.eua_dataset import EuaDataset
 
 
-def seed_torch(seed=42):
-    random.seed(seed)
-    os.environ['PYTHONHASHSEED'] = str(seed)  # 为了禁止hash随机化，使得实验可复现
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
-
-
 if __name__ == '__main__':
     seed_torch()
-    batch_size = 256
+    batch_size = 128
     use_cuda = True
     lr = 3e-4
     beta = 0.9
@@ -53,10 +44,8 @@ if __name__ == '__main__':
     use_cuda = use_cuda and torch.cuda.is_available()
     device = torch.device("cuda:0" if use_cuda else "cpu")
 
-    need_continue = True
-    continue_model_filename = "D:/transformer_eua/model/" \
-                              "03142102_server_0.5_1_user_200_miu_35_sigma_10_transformer_linear_RGRB_capa_rate_0.2/" \
-                              "03160100_97.61_59.00_48.95.mdl"
+    need_continue = False
+    continue_model_filename = None
 
     dataset_dir_name = "D:/transformer_eua/dataset/server_" + str(x_end) + "_" + str(y_end) \
                        + "_miu_" + str(miu) + "_sigma_" + str(sigma)
@@ -137,6 +126,7 @@ if __name__ == '__main__':
     os.makedirs(model_dir_name, exist_ok=True)
     os.makedirs(board_dir_name, exist_ok=True)
     tensorboard_writer = SummaryWriter(board_dir_name)
+    logger = get_logger(log_file_name)
 
     all_valid_reward_list = []
     all_valid_user_list = []
@@ -199,10 +189,9 @@ if __name__ == '__main__':
             critic_exp_mvg_avg = critic_exp_mvg_avg.detach()
 
             if batch_idx % int(2048 / batch_size) == 0:
-                log_and_print(
-                    '{} Epoch {}: Train [{}/{} ({:.1f}%)]\tR:{:.6f}\tuser_props: {:.6f}'
+                logger.info(
+                    'Epoch {}: Train [{}/{} ({:.1f}%)]\tR:{:.6f}\tuser_props: {:.6f}'
                     '\tserver_props: {:.6f}\tcapacity_props:{:.6f}'.format(
-                        time.strftime('%H:%M:%S', time.localtime(time.time())),
                         epoch,
                         (batch_idx + 1) * len(user_seq),
                         data_size['train'],
@@ -210,8 +199,7 @@ if __name__ == '__main__':
                         torch.mean(reward),
                         torch.mean(user_allocated_props),
                         torch.mean(server_used_props),
-                        torch.mean(capacity_used_props)),
-                    log_file_name)
+                        torch.mean(capacity_used_props)))
 
         tensorboard_writer.add_scalar('train/train_reward', torch.mean(reward), epoch)
         tensorboard_writer.add_scalar('train/train_user_allocated_props', torch.mean(user_allocated_props), epoch)
@@ -221,7 +209,7 @@ if __name__ == '__main__':
         # Valid and Test
         model.eval()
         model.policy = 'greedy'
-        log_and_print('', log_file_name)
+        logger.info('')
         with torch.no_grad():
             # Validation
             valid_R_list = []
@@ -238,10 +226,9 @@ if __name__ == '__main__':
                     = model(user_seq, server_seq, masks)
 
                 if batch_idx % int(2048 / batch_size) == 0:
-                    log_and_print(
-                        '{} Epoch {}: Valid [{}/{} ({:.1f}%)]\tR:{:.6f}\tuser_props: {:.6f}'
+                    logger.info(
+                        'Epoch {}: Valid [{}/{} ({:.1f}%)]\tR:{:.6f}\tuser_props: {:.6f}'
                         '\tserver_props: {:.6f}\tcapacity_props:{:.6f}'.format(
-                            time.strftime('%H:%M:%S', time.localtime(time.time())),
                             epoch,
                             (batch_idx + 1) * len(user_seq),
                             data_size['valid'],
@@ -250,8 +237,7 @@ if __name__ == '__main__':
                             torch.mean(user_allocated_props),
                             torch.mean(server_used_props),
                             torch.mean(capacity_used_props)
-                        ),
-                        log_file_name)
+                        ))
 
                 valid_R_list.append(reward)
                 valid_user_allocated_props_list.append(user_allocated_props)
@@ -266,11 +252,8 @@ if __name__ == '__main__':
             valid_user_allo = torch.mean(valid_user_allocated_props_list)
             valid_server_use = torch.mean(valid_server_used_props_list)
             valid_capacity_use = torch.mean(valid_capacity_used_props_list)
-            log_and_print('{} Epoch {}: Valid \tR:{:.6f}\tuser_props: {:.6f}'
-                          '\tserver_props: {:.6f}\tcapacity_props:{:.6f}'
-                          .format(time.strftime('%H:%M:%S', time.localtime(time.time())), epoch, valid_r,
-                                  valid_user_allo, valid_server_use, valid_capacity_use),
-                          log_file_name)
+            logger.info('Epoch {}: Valid \tR:{:.6f}\tuser_props: {:.6f}\tserver_props: {:.6f}\tcapacity_props:{:.6f}'
+                        .format(epoch, valid_r, valid_user_allo, valid_server_use, valid_capacity_use))
 
             tensorboard_writer.add_scalar('valid/valid_reward', valid_r, epoch)
             tensorboard_writer.add_scalar('valid/valid_user_allocated_props', valid_user_allo, epoch)
@@ -300,10 +283,10 @@ if __name__ == '__main__':
                     best_server = valid_server_use
                     best_capacity = valid_capacity_use
                     best_time = 0
-                    log_and_print("目前本次reward最好\n", log_file_name)
+                    logger.info("目前本次reward最好\n")
                 else:
                     best_time += 1
-                    log_and_print("已经有{}轮效果没变好了\n".format(best_time), log_file_name)
+                    logger.info("已经有{}轮效果没变好了\n".format(best_time))
 
             # Test
             test_R_list = []
@@ -318,10 +301,9 @@ if __name__ == '__main__':
                     = model(user_seq, server_seq, masks)
 
                 if batch_idx % int(2048 / batch_size) == 0:
-                    log_and_print(
-                        '{} Epoch {}: Test [{}/{} ({:.1f}%)]\tR:{:.6f}\tuser_props: {:.6f}'
+                    logger.info(
+                        'Epoch {}: Test [{}/{} ({:.1f}%)]\tR:{:.6f}\tuser_props: {:.6f}'
                         '\tserver_props: {:.6f}\tcapacity_props:{:.6f}'.format(
-                            time.strftime('%H:%M:%S', time.localtime(time.time())),
                             epoch,
                             (batch_idx + 1) * len(user_seq),
                             data_size['test'],
@@ -330,8 +312,7 @@ if __name__ == '__main__':
                             torch.mean(user_allocated_props),
                             torch.mean(server_used_props),
                             torch.mean(capacity_used_props)
-                        ),
-                        log_file_name)
+                        ))
 
                 test_R_list.append(reward)
                 test_user_allocated_props_list.append(user_allocated_props)
@@ -347,35 +328,31 @@ if __name__ == '__main__':
             test_user_allo = torch.mean(test_user_allocated_props_list)
             test_server_use = torch.mean(test_server_used_props_list)
             test_capacity_use = torch.mean(test_capacity_used_props_list)
-            log_and_print('{} Epoch {}: Test \tR:{:.6f}\tuser_props: {:.6f}'
-                          '\tserver_props: {:.6f}\tcapacity_props:{:.6f}'
-                          .format(time.strftime('%H:%M:%S', time.localtime(time.time())), epoch, test_r,
-                                  test_user_allo, test_server_use, test_capacity_use),
-                          log_file_name)
+            logger.info('Epoch {}: Test \tR:{:.6f}\tuser_props: {:.6f}\tserver_props: {:.6f}\tcapacity_props:{:.6f}'
+                        .format(epoch, test_r, test_user_allo, test_server_use, test_capacity_use))
             tensorboard_writer.add_scalar('test/test_reward', test_r, epoch)
             tensorboard_writer.add_scalar('test/test_user_allocated_props', test_user_allo, epoch)
             tensorboard_writer.add_scalar('test/test_server_used_props', test_server_use, epoch)
             tensorboard_writer.add_scalar('test/test_capacity_used_props', test_capacity_use, epoch)
 
-            log_and_print('', log_file_name)
+            logger.info('')
             torch.cuda.empty_cache()
 
             # 如果超过设定的epoch次数valid奖励都没有再提升，就停止训练
             if best_time >= wait_best_reward_epoch:
-                log_and_print("效果如下：", log_file_name)
+                logger.info("效果如下：")
                 for i in range(len(all_valid_reward_list)):
-                    log_and_print("Epoch: {}\treward: {:.6f}\tuser_props: {:.6f}"
-                                  "\tserver_props: {:.6f}\tcapacity_props: {:.6f}"
-                                  .format(i, all_valid_reward_list[i], all_valid_user_list[i],
-                                          all_valid_server_list[i], all_valid_capacity_list[i]),
-                                  log_file_name)
+                    logger.info("Epoch: {}\treward: {:.6f}\tuser_props: {:.6f}"
+                                "\tserver_props: {:.6f}\tcapacity_props: {:.6f}"
+                                .format(i, all_valid_reward_list[i], all_valid_user_list[i],
+                                        all_valid_server_list[i], all_valid_capacity_list[i]))
                 model_filename = model_dir_name + "/" + time.strftime(
                     '%m%d%H%M', time.localtime(time.time())
                 ) + "_{:.2f}_{:.2f}_{:.2f}".format(best_user * 100, best_server * 100, best_capacity * 100) + '.mdl'
                 torch.save(best_state, model_filename)
-                log_and_print("模型已存储到: {}".format(model_filename), log_file_name)
-                log_and_print("训练结束，最好的reward:{}，用户分配率:{}，服务器租用率:{}，资源利用率:{}"
-                              .format(best_r, best_user, best_server, best_capacity), log_file_name)
+                logger.info("模型已存储到: {}".format(model_filename))
+                logger.info("训练结束，最好的reward:{}，用户分配率:{}，服务器租用率:{}，资源利用率:{}"
+                            .format(best_r, best_user, best_server, best_capacity))
                 exit()
 
             # 每interval个epoch保存一次模型：
@@ -392,4 +369,4 @@ if __name__ == '__main__':
                 else:
                     state = {'model': model.state_dict(), 'optimizer': optimizer.state_dict(), 'epoch': epoch}
                 torch.save(state, model_filename)
-                log_and_print("模型已存储到: {}".format(model_filename), log_file_name)
+                logger.info("模型已存储到: {}".format(model_filename))
