@@ -5,7 +5,6 @@ from matplotlib import pyplot as plt
 from matplotlib.patches import Circle
 from tqdm import tqdm
 
-from data.eua_dataset import EuaDataset
 
 workload_list = [
     np.array([1, 2, 1, 2]),
@@ -162,7 +161,7 @@ def cal_props(user_seqs, server_seqs, allocated_seq):
 # 获取所有服务器
 def get_all_server_xy():
     server_list = []
-    file = open("../data/site-optus-melbCBD.csv", 'r')
+    file = open("data/site-optus-melbCBD.csv", 'r')
     file.readline().strip()  # 数据集的第一行是字段说明信息，不能作为数据，因此跳过
     lines = file.readlines()
     for i in range(len(lines)):

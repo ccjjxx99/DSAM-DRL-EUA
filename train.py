@@ -1,17 +1,14 @@
 import os
 import time
-import numpy as np
 import torch
 from torch.optim import Adam
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 import torch.nn.functional as F
 
-from nets.attention_net import PointerNet
-from nets.attention_net import CriticNet
-from util.utils import save_dataset, seed_torch, get_logger
-from data.data_generator import init_server, init_users_list_by_server
-from data.eua_dataset import EuaDataset
+from nets.attention_net import PointerNet, CriticNet
+from util.utils import seed_torch, get_logger
+from data.eua_dataset import get_dataset
 
 
 if __name__ == '__main__':
@@ -47,45 +44,11 @@ if __name__ == '__main__':
     need_continue = False
     continue_model_filename = None
 
-    dataset_dir_name = "D:/transformer_eua/dataset/server_" + str(x_end) + "_" + str(y_end) \
-                       + "_miu_" + str(miu) + "_sigma_" + str(sigma)
-    server_file_name = "server_" + str(x_end) + "_" + str(y_end) + "_miu_" + str(miu) + "_sigma_" + str(sigma)
-    server_path = os.path.join(dataset_dir_name, server_file_name) + '.npy'
+    data_set = get_dataset(x_end, y_end, miu, sigma, user_num, data_size, min_cov, max_cov, device)
 
-    train_filename = "train_user_" + str(user_num) + "_size_" + str(data_size['train'])
-    valid_filename = "valid_user_" + str(user_num) + "_size_" + str(data_size['valid'])
-    test_filename = "test_user_" + str(user_num) + "_size_" + str(data_size['test'])
-
-    path = {'train': os.path.join(dataset_dir_name, train_filename) + '.npz',
-            'valid': os.path.join(dataset_dir_name, valid_filename) + '.npz',
-            'test': os.path.join(dataset_dir_name, test_filename) + '.npz'}
-    set_types = ['train', 'valid', 'test']
-    # 判断目录是否存在
-    if os.path.exists(server_path):
-        servers = np.load(server_path)
-        print("读取服务器数据成功")
-    else:
-        print("未读取到服务器数据，重新生成")
-        os.makedirs(dataset_dir_name)
-        servers = init_server(0, x_end, 0, y_end, min_cov, max_cov, miu, sigma)
-        np.save(server_path, servers)
-    datas = []
-    for set_type in set_types:
-        if os.path.exists(path[set_type]):
-            print("正在加载", set_type, "数据集")
-            data = np.load(path[set_type])
-            datas.append(data)
-        else:
-            print(set_type, "数据集未找到，重新生成")
-            data = init_users_list_by_server(servers, data_size[set_type], user_num, True, max_cov)
-            datas.append(data)
-            save_dataset(path[set_type], **data)
-    train_set = EuaDataset(servers, **datas[0], device=device)
-    valid_set = EuaDataset(servers, **datas[1], device=device)
-    test_set = EuaDataset(servers, **datas[2], device=device)
-    train_loader = DataLoader(dataset=train_set, batch_size=batch_size, shuffle=True)
-    valid_loader = DataLoader(dataset=valid_set, batch_size=batch_size, shuffle=False)
-    test_loader = DataLoader(dataset=test_set, batch_size=batch_size, shuffle=False)
+    train_loader = DataLoader(dataset=data_set['train'], batch_size=batch_size, shuffle=True)
+    valid_loader = DataLoader(dataset=data_set['valid'], batch_size=batch_size, shuffle=False)
+    test_loader = DataLoader(dataset=data_set['test'], batch_size=batch_size, shuffle=False)
 
     model = PointerNet(6, 7, 256, device=device, dropout=dropout, capacity_reward_rate=capacity_reward_rate,
                        user_embedding_type=user_embedding_type, server_embedding_type=server_embedding_type)
