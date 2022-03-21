@@ -2,12 +2,12 @@ from data.eua_dataset import get_dataset
 
 
 def main_get_dataset():
-    user_num = 200
+    user_num = 400
     x_end = 0.5
     y_end = 1
     min_cov = 1
     max_cov = 1.5
-    miu = 45
+    miu = 35
     sigma = 10
     data_size = {
         'train': 100000,

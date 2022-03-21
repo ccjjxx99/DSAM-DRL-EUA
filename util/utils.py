@@ -119,6 +119,7 @@ def test_by_model_and_set(model, batch_size, test_set, device):
 
 def mask_trans_to_list(user_masks, server_num):
     x = []
+    user_masks = user_masks.astype(np.bool)
     server_arrange = np.arange(server_num)
     for i in range(len(user_masks)):
         mask = user_masks[i]

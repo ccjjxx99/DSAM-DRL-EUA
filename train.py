@@ -13,7 +13,7 @@ from data.eua_dataset import get_dataset
 
 if __name__ == '__main__':
     seed_torch()
-    batch_size = 128
+    batch_size = 256
     use_cuda = True
     lr = 3e-4
     beta = 0.9
@@ -21,12 +21,12 @@ if __name__ == '__main__':
     epochs = 1000
     dropout = 0
     capacity_reward_rate = 0.2
-    user_num = 300
+    user_num = 200
     x_end = 0.5
     y_end = 1
     min_cov = 1
     max_cov = 1.5
-    miu = 35
+    miu = 45
     sigma = 10
     user_embedding_type = 'transformer'
     server_embedding_type = 'linear'
@@ -44,11 +44,11 @@ if __name__ == '__main__':
     need_continue = False
     continue_model_filename = None
 
-    data_set = get_dataset(x_end, y_end, miu, sigma, user_num, data_size, min_cov, max_cov, device)
+    dataset = get_dataset(x_end, y_end, miu, sigma, user_num, data_size, min_cov, max_cov, device)
 
-    train_loader = DataLoader(dataset=data_set['train'], batch_size=batch_size, shuffle=True)
-    valid_loader = DataLoader(dataset=data_set['valid'], batch_size=batch_size, shuffle=False)
-    test_loader = DataLoader(dataset=data_set['test'], batch_size=batch_size, shuffle=False)
+    train_loader = DataLoader(dataset=dataset['train'], batch_size=batch_size, shuffle=True)
+    valid_loader = DataLoader(dataset=dataset['valid'], batch_size=batch_size, shuffle=False)
+    test_loader = DataLoader(dataset=dataset['test'], batch_size=batch_size, shuffle=False)
 
     model = PointerNet(6, 7, 256, device=device, dropout=dropout, capacity_reward_rate=capacity_reward_rate,
                        user_embedding_type=user_embedding_type, server_embedding_type=server_embedding_type)
