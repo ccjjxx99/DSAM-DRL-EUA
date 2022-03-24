@@ -7,7 +7,7 @@ def main_get_dataset():
     y_end = 1
     min_cov = 1
     max_cov = 1.5
-    miu = 35
+    miu = 45
     sigma = 10
     data_size = {
         'train': 100000,
