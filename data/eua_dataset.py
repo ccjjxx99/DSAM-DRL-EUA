@@ -38,7 +38,7 @@ class EuaDataset(Dataset):
         return self.servers_tensor, user_seq, mask_seq
 
 
-def get_dataset(x_end, y_end, miu, sigma, user_num, data_size: {}, min_cov, max_cov, device):
+def get_dataset(x_end, y_end, miu, sigma, user_num, data_size: {}, min_cov, max_cov, device, dir_name):
     """
     获取dataset
     :param x_end:
@@ -52,8 +52,9 @@ def get_dataset(x_end, y_end, miu, sigma, user_num, data_size: {}, min_cov, max_
     :param device:
     :return:
     """
-    dataset_dir_name = "D:/transformer_eua/dataset/server_" + str(x_end) + "_" + str(y_end) \
-                       + "_miu_" + str(miu) + "_sigma_" + str(sigma)
+    dataset_dir_name = os.path.join(dir_name,
+                                    "dataset/server_" + str(x_end) + "_" + str(y_end)
+                                    + "_miu_" + str(miu) + "_sigma_" + str(sigma))
     server_file_name = "server_" + str(x_end) + "_" + str(y_end) + "_miu_" + str(miu) + "_sigma_" + str(sigma)
     server_path = os.path.join(dataset_dir_name, server_file_name) + '.npy'
     if os.path.exists(server_path):
@@ -75,7 +76,7 @@ def get_dataset(x_end, y_end, miu, sigma, user_num, data_size: {}, min_cov, max_
             print("正在加载", set_type, "数据集")
             data = np.load(path)
         else:
-            print(set_type, "数据集未找到，重新生成")
+            print(set_type, "数据集未找到，重新生成", path)
             data = init_users_list_by_server(servers, data_size[set_type], user_num, True, max_cov)
             save_dataset(path, **data)
         datasets[set_type] = EuaDataset(servers, **data, device=device)

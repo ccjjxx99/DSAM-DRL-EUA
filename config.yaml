@@ -1,5 +1,5 @@
 train:
-  batch_size: 128
+  batch_size: 64
   use_cuda: True
   lr: 3.0e-4
   beta: 0.9
@@ -11,7 +11,7 @@ train:
   dir_name: 'D:\transformer_eua'
   device: 'cuda:0'
 data:
-  user_num: 300
+  user_num: 500
   x_end: 0.5
   y_end: 1
   min_cov: 1
@@ -28,4 +28,4 @@ model:
   user_embedding_type: 'transformer'
   server_embedding_type: 'linear'
   need_continue: True
-  continue_model_filename: 'D:\transformer_eua\03111924_server_0.5_1_user_200_miu_35_sigma_10_transformer_linear_RGRB_capa_rate_1\03122134_96.32_55.01_51.61.mdl'
+  continue_model_filename: 'D:\transformer_eua\03270959_server_0.5_1_user_500_miu_35_sigma_10_transformer_linear_RGRB_capa_rate_1\03280323_83.62_84.55_63.83.mdl'

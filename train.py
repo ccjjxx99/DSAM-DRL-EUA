@@ -20,7 +20,7 @@ if __name__ == '__main__':
     device = train_config['device']
     dataset = get_dataset(data_config['x_end'], data_config['y_end'], data_config['miu'], data_config['sigma'],
                           data_config['user_num'], data_config['data_size'],
-                          data_config['min_cov'], data_config['max_cov'], device)
+                          data_config['min_cov'], data_config['max_cov'], device, train_config['dir_name'])
     train_loader = DataLoader(dataset=dataset['train'], batch_size=train_config['batch_size'], shuffle=True)
     valid_loader = DataLoader(dataset=dataset['valid'], batch_size=train_config['batch_size'], shuffle=False)
     test_loader = DataLoader(dataset=dataset['test'], batch_size=train_config['batch_size'], shuffle=False)
