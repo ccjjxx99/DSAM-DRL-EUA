@@ -50,6 +50,7 @@ def get_dataset(x_end, y_end, miu, sigma, user_num, data_size: {}, min_cov, max_
     :param min_cov:
     :param max_cov:
     :param device:
+    :param dir_name: 数据集存放的文件夹
     :return:
     """
     dataset_dir_name = os.path.join(dir_name,
