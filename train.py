@@ -39,7 +39,7 @@ def train(config):
 
     # 加载需要继续训练的模型
     if model_config['need_continue']:
-        checkpoint = torch.load(model_config['continue_model_filename'])
+        checkpoint = torch.load(model_config['continue_model_filename'], map_location='cpu')
         model.load_state_dict(checkpoint['model'])
         optimizer.load_state_dict(checkpoint['optimizer'])
         start_epoch = checkpoint['epoch']
