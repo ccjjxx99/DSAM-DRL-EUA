@@ -66,6 +66,7 @@ def train(config):
     os.makedirs(dir_name, exist_ok=True)
     tensorboard_writer = SummaryWriter(dir_name)
     logger = get_logger(log_file_name)
+    now_exit = False
 
     all_valid_reward_list = []
     all_valid_user_list = []
