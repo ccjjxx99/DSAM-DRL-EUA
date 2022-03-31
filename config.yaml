@@ -6,9 +6,9 @@ train:
   max_grad_norm: 2.
   epochs: 1000
   train_type: 'RGRB'
-  wait_best_reward_epoch: 10
-  save_model_epoch_interval: 10
-  dir_name: 'D:\transformer_eua'
+  wait_best_reward_epoch: 5
+  save_model_epoch_interval: 5
+  dir_name: '/home/inspur/cjx/data_dir'
   device: 'cuda:0'
 data:
   user_num: 500
@@ -24,8 +24,8 @@ data:
     test: 10000
 model:
   dropout: 0
-  capacity_reward_rate: 1
+  capacity_reward_rate: 0.5
   user_embedding_type: 'transformer'
   server_embedding_type: 'linear'
   need_continue: True
-  continue_model_filename: 'D:\transformer_eua\03270959_server_0.5_1_user_500_miu_35_sigma_10_transformer_linear_RGRB_capa_rate_1\03280323_83.62_84.55_63.83.mdl'
+  continue_model_filename: '/home/inspur/cjx/data_dir/03291402_server_0.5_1_user_500_miu_35_sigma_10_transformer_linear_RGRB_capa_rate_0.5/03310240_85.11_90.59_62.12.mdl'

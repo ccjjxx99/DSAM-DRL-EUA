@@ -11,10 +11,9 @@ from nets.attention_net import PointerNet, CriticNet
 from util.utils import seed_torch, get_logger
 from data.eua_dataset import get_dataset
 
-if __name__ == '__main__':
+
+def train(config):
     seed_torch()
-    with open('config.yaml', 'r') as f:
-        config = yaml.safe_load(f)
     train_config, data_config, model_config = config['train'], config['data'], config['model']
     assert torch.cuda.is_available(), 'cuda无法使用'
     device = train_config['device']
@@ -72,6 +71,7 @@ if __name__ == '__main__':
     all_valid_user_list = []
     all_valid_server_list = []
     all_valid_capacity_list = []
+    best_r = 0
     for epoch in range(start_epoch, train_config['epochs']):
         # Train
         model.train()
@@ -80,8 +80,7 @@ if __name__ == '__main__':
         for batch_idx, (server_seq, user_seq, masks) in enumerate(train_loader):
             server_seq, user_seq, masks = server_seq.to(device), user_seq.to(device), masks.to(device)
 
-            reward, actions_probs, action_idx, user_allocated_props, \
-                server_used_props, capacity_used_props, user_allocate_list \
+            reward, actions_probs, _, user_allocated_props, server_used_props, capacity_used_props, _ \
                 = model(user_seq, server_seq, masks)
 
             if train_config['train_type'] == 'REINFORCE':
@@ -104,9 +103,7 @@ if __name__ == '__main__':
             elif train_config['train_type'] == 'RGRB':
                 model.policy = 'greedy'
                 with torch.no_grad():
-                    reward2, actions_probs2, action_idx2, user_allocated_props2, \
-                        server_used_props2, capacity_used_props2, user_allocate_list2 \
-                        = model(user_seq, server_seq, masks)
+                    reward2, _, _, _, _, _, _ = model(user_seq, server_seq, masks)
                     advantage = reward - reward2
                 model.policy = 'sample'
 
@@ -162,8 +159,7 @@ if __name__ == '__main__':
             for batch_idx, (server_seq, user_seq, masks) in enumerate(valid_loader):
                 server_seq, user_seq, masks = server_seq.to(device), user_seq.to(device), masks.to(device)
 
-                reward, _, action_idx, user_allocated_props, \
-                    server_used_props, capacity_used_props, user_allocate_list \
+                reward, _, _, user_allocated_props, server_used_props, capacity_used_props, _ \
                     = model(user_seq, server_seq, masks)
 
                 if batch_idx % int(2048 / train_config['batch_size']) == 0:
@@ -205,29 +201,23 @@ if __name__ == '__main__':
             all_valid_user_list.append(valid_user_allo)
             all_valid_server_list.append(valid_server_use)
             all_valid_capacity_list.append(valid_capacity_use)
-            if len(all_valid_reward_list) == 1:
+
+            # 每次遇到更好的reward就保存一次模型
+            if valid_r < best_r:
                 best_r = valid_r
                 best_user = valid_user_allo
                 best_server = valid_server_use
                 best_capacity = valid_capacity_use
-                if train_config['train_type'] == 'ac':
-                    best_state = {'model': model.state_dict(), 'optimizer': optimizer.state_dict(), 'epoch': epoch,
-                                  'critic_model': critic_model.state_dict(),
-                                  'critic_optimizer': critic_optimizer.state_dict()}
-                else:
-                    best_state = {'model': model.state_dict(), 'optimizer': optimizer.state_dict(), 'epoch': epoch}
                 best_time = 0
+                logger.info("目前本次reward最好\n")
+                model_filename = dir_name + "/" + time.strftime(
+                    '%m%d%H%M', time.localtime(time.time())
+                ) + "_{:.2f}_{:.2f}_{:.2f}".format(best_user * 100, best_server * 100, best_capacity * 100) + '.mdl'
+                torch.save(model.state_dict(), model_filename)
+                logger.info("模型已存储到: {}".format(model_filename))
             else:
-                if valid_r < best_r:
-                    best_r = valid_r
-                    best_user = valid_user_allo
-                    best_server = valid_server_use
-                    best_capacity = valid_capacity_use
-                    best_time = 0
-                    logger.info("目前本次reward最好\n")
-                else:
-                    best_time += 1
-                    logger.info("已经有{}轮效果没变好了\n".format(best_time))
+                best_time += 1
+                logger.info("已经有{}轮效果没变好了\n".format(best_time))
 
             # Test
             test_R_list = []
@@ -237,8 +227,7 @@ if __name__ == '__main__':
             for batch_idx, (server_seq, user_seq, masks) in enumerate(test_loader):
                 server_seq, user_seq, masks = server_seq.to(device), user_seq.to(device), masks.to(device)
 
-                reward, _, action_idx, user_allocated_props, \
-                    server_used_props, capacity_used_props, user_allocate_list \
+                reward, _, _, user_allocated_props, server_used_props, capacity_used_props, _ \
                     = model(user_seq, server_seq, masks)
 
                 if batch_idx % int(2048 / train_config['batch_size']) == 0:
@@ -277,7 +266,6 @@ if __name__ == '__main__':
             tensorboard_writer.add_scalar('test/test_capacity_used_props', test_capacity_use, epoch)
 
             logger.info('')
-            # torch.cuda.empty_cache()
 
             # 如果超过设定的epoch次数valid奖励都没有再提升，就停止训练
             if best_time >= train_config['wait_best_reward_epoch']:
@@ -287,22 +275,20 @@ if __name__ == '__main__':
                                 "\tserver_props: {:.6f}\tcapacity_props: {:.6f}"
                                 .format(i, all_valid_reward_list[i], all_valid_user_list[i],
                                         all_valid_server_list[i], all_valid_capacity_list[i]))
-                model_filename = dir_name + "/" + time.strftime(
-                    '%m%d%H%M', time.localtime(time.time())
-                ) + "_{:.2f}_{:.2f}_{:.2f}".format(best_user * 100, best_server * 100, best_capacity * 100) + '.mdl'
-                torch.save(best_state, model_filename)
-                logger.info("模型已存储到: {}".format(model_filename))
-                logger.info("训练结束，最好的reward:{}，用户分配率:{}，服务器租用率:{}，资源利用率:{}"
-                            .format(best_r, best_user, best_server, best_capacity))
-                exit()
+                logger.info("训练结束，最好的reward:{}，用户分配率:{:.2f}，服务器租用率:{:.2f}，资源利用率:{:.2f}"
+                            .format(best_r, best_user * 100, best_server * 100, best_capacity * 100))
 
-            # 每interval个epoch保存一次模型：
-            if epoch % train_config['save_model_epoch_interval'] == train_config['save_model_epoch_interval'] - 1:
+                # 保存一次可继续训练的模型就退出
+                now_exit = True
+
+            # 每interval个epoch，或者即将退出的时候，保存一次可继续训练的模型：
+            if epoch % train_config['save_model_epoch_interval'] == train_config['save_model_epoch_interval'] - 1 \
+                    or now_exit:
                 model_filename = dir_name + "/" + time.strftime(
                     '%m%d%H%M', time.localtime(time.time())
                 ) + "_{:.2f}_{:.2f}_{:.2f}".format(valid_user_allo * 100,
                                                    valid_server_use * 100,
-                                                   valid_capacity_use * 100) + '.mdl'
+                                                   valid_capacity_use * 100) + '.pt'
                 if train_config['train_type'] == 'ac':
                     state = {'model': model.state_dict(), 'optimizer': optimizer.state_dict(), 'epoch': epoch,
                              'critic_model': critic_model.state_dict(),
@@ -311,3 +297,12 @@ if __name__ == '__main__':
                     state = {'model': model.state_dict(), 'optimizer': optimizer.state_dict(), 'epoch': epoch}
                 torch.save(state, model_filename)
                 logger.info("模型已存储到: {}".format(model_filename))
+
+                if now_exit:
+                    return model_filename
+
+
+if __name__ == '__main__':
+    with open('config.yaml', 'r') as f:
+        loaded_config = yaml.safe_load(f)
+    train(loaded_config)
