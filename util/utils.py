@@ -11,13 +11,6 @@ from torch.utils.data import DataLoader
 from tqdm import trange, tqdm
 
 
-def can_allocate(workload, capacity):
-    for i in range(4):
-        if capacity[i] < workload[i]:
-            return False
-    return True
-
-
 def get_reward(original_servers, users, actions):
     user_num = len(users)
     server_num = len(original_servers)
@@ -25,6 +18,14 @@ def get_reward(original_servers, users, actions):
     user_allocate_list = [-1] * user_num
     # 每个服务器分配到的用户数量
     server_allocate_num = [0] * server_num
+
+    def can_allocate(user1, server1):
+        if not np.linalg.norm(user[:2] - server[:2]) <= server[2]:
+            return False
+        for i in range(4):
+            if user1[i + 2] > server1[i + 3]:
+                return False
+        return True
 
     def allocate(allocated_user_id, allocated_server_id):
         user_allocate_list[allocated_user_id] = allocated_server_id
@@ -39,8 +40,7 @@ def get_reward(original_servers, users, actions):
 
         server_id = actions[user_id]
         server = servers[server_id]
-        capacity = server[3:]
-        if can_allocate(workload, capacity):
+        if can_allocate(user, server):
             server[3:] -= workload
             allocate(user_id, server_id)
             # print("用户", user_id, "负载", workload, "服务器", final_server_id, "资源剩余", servers[final_server_id][3:])
@@ -96,9 +96,17 @@ def test_by_model_and_set(model, batch_size, test_set, device):
         for server_seq, user_seq, masks in tqdm(test_loader):
             server_seq, user_seq, masks = server_seq.to(device), user_seq.to(device), masks.to(device)
 
-            reward, _, action_idx, user_allocated_props, \
-                server_used_props, capacity_used_props, user_allocate_list \
+            reward, _, action_idx, user_allocated_props, server_used_props, capacity_used_props, user_allocate_list \
                 = model(user_seq, server_seq, masks)
+
+            # 将batch_size设为1并取消注释下面的代码，可以测试模型自带的reward函数计算是否准确，防止不小心结果造假
+            # print(user_allocated_props[0].item(), server_used_props[0].item(), capacity_used_props[0].item())
+            #
+            # _, _, user_allocated_prop, server_used_prop, capacity_used_prop \
+            #     = get_reward(server_seq.squeeze(0).cpu().numpy(),
+            #                  user_seq.squeeze(0).cpu().numpy(),
+            #                  user_allocate_list.squeeze(0).cpu().numpy())
+            # print(user_allocated_prop, server_used_prop, capacity_used_prop)
 
             test_R_list.append(reward)
             test_user_allocated_props_list.append(user_allocated_props)
@@ -114,6 +122,38 @@ def test_by_model_and_set(model, batch_size, test_set, device):
         test_user_allo = torch.mean(test_user_allocated_props_list)
         test_server_use = torch.mean(test_server_used_props_list)
         test_capacity_use = torch.mean(test_capacity_used_props_list)
+        print('Ptr:\t', test_user_allo.item(), test_server_use.item(), test_capacity_use.item())
+
+
+def test_by_model_and_set_without_batch(model, test_set, device):
+    test_loader = DataLoader(dataset=test_set, batch_size=1, shuffle=False)
+    # Test
+    model.eval()
+    model.policy = 'greedy'
+    with torch.no_grad():
+        # test_R_list = []
+        test_user_allocated_props_list = []
+        test_server_used_props_list = []
+        test_capacity_used_props_list = []
+        for server_seq, user_seq, masks in tqdm(test_loader):
+            server_seq, user_seq, masks = server_seq.to(device), user_seq.to(device), masks.to(device)
+
+            _, _, action_idx, _, _, _, user_allocate_list = model(user_seq, server_seq, masks)
+
+            _, _, user_allocated_prop, server_used_prop, capacity_used_prop \
+                = get_reward(server_seq.squeeze(0).cpu().numpy(),
+                             user_seq.squeeze(0).cpu().numpy(),
+                             user_allocate_list.squeeze(0).cpu().numpy())
+
+            # test_R_list.append(reward)
+            test_user_allocated_props_list.append(user_allocated_prop)
+            test_server_used_props_list.append(server_used_prop)
+            test_capacity_used_props_list.append(capacity_used_prop)
+
+        # test_r = torch.mean(test_R_list)
+        test_user_allo = np.mean(test_user_allocated_props_list)
+        test_server_use = np.mean(test_server_used_props_list)
+        test_capacity_use = np.mean(test_capacity_used_props_list)
         print('Ptr:\t', test_user_allo.item(), test_server_use.item(), test_capacity_use.item())
 
 

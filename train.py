@@ -42,7 +42,7 @@ def train(config):
         checkpoint = torch.load(model_config['continue_model_filename'], map_location='cpu')
         model.load_state_dict(checkpoint['model'])
         optimizer.load_state_dict(checkpoint['optimizer'])
-        start_epoch = checkpoint['epoch']
+        start_epoch = checkpoint['epoch'] + 1
 
         if train_config['train_type'] == 'ac':
             critic_model.load_state_dict(checkpoint['critic_model'])
