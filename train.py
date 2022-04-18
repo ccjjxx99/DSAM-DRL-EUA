@@ -259,6 +259,7 @@ def train(config):
             test_user_allo = torch.mean(test_user_allocated_props_list)
             test_server_use = torch.mean(test_server_used_props_list)
             test_capacity_use = torch.mean(test_capacity_used_props_list)
+
             logger.info('Epoch {}: Test \tR:{:.6f}\tuser_props: {:.6f}\tserver_props: {:.6f}\tcapacity_props:{:.6f}'
                         .format(epoch, test_r, test_user_allo, test_server_use, test_capacity_use))
             tensorboard_writer.add_scalar('test/test_reward', test_r, epoch)
@@ -266,41 +267,41 @@ def train(config):
             tensorboard_writer.add_scalar('test/test_server_used_props', test_server_use, epoch)
             tensorboard_writer.add_scalar('test/test_capacity_used_props', test_capacity_use, epoch)
 
-            logger.info('')
+        logger.info('')
 
-            # 如果超过设定的epoch次数valid奖励都没有再提升，就停止训练
-            if best_time >= train_config['wait_best_reward_epoch']:
-                logger.info("效果如下：")
-                for i in range(len(all_valid_reward_list)):
-                    logger.info("Epoch: {}\treward: {:.6f}\tuser_props: {:.6f}"
-                                "\tserver_props: {:.6f}\tcapacity_props: {:.6f}"
-                                .format(i, all_valid_reward_list[i], all_valid_user_list[i],
-                                        all_valid_server_list[i], all_valid_capacity_list[i]))
-                logger.info("训练结束，最好的reward:{}，用户分配率:{:.2f}，服务器租用率:{:.2f}，资源利用率:{:.2f}"
-                            .format(best_r, best_user * 100, best_server * 100, best_capacity * 100))
+        # 如果超过设定的epoch次数valid奖励都没有再提升，就停止训练
+        if best_time >= train_config['wait_best_reward_epoch']:
+            logger.info("效果如下：")
+            for i in range(len(all_valid_reward_list)):
+                logger.info("Epoch: {}\treward: {:.6f}\tuser_props: {:.6f}"
+                            "\tserver_props: {:.6f}\tcapacity_props: {:.6f}"
+                            .format(i, all_valid_reward_list[i], all_valid_user_list[i],
+                                    all_valid_server_list[i], all_valid_capacity_list[i]))
+            logger.info("训练结束，最好的reward:{}，用户分配率:{:.2f}，服务器租用率:{:.2f}，资源利用率:{:.2f}"
+                        .format(best_r, best_user * 100, best_server * 100, best_capacity * 100))
 
-                # 保存一次可继续训练的模型就退出
-                now_exit = True
+            # 保存一次可继续训练的模型就退出
+            now_exit = True
 
-            # 每interval个epoch，或者即将退出的时候，保存一次可继续训练的模型：
-            if epoch % train_config['save_model_epoch_interval'] == train_config['save_model_epoch_interval'] - 1 \
-                    or now_exit:
-                model_filename = dir_name + "/" + time.strftime(
-                    '%m%d%H%M', time.localtime(time.time())
-                ) + "_{:.2f}_{:.2f}_{:.2f}".format(valid_user_allo * 100,
-                                                   valid_server_use * 100,
-                                                   valid_capacity_use * 100) + '.pt'
-                if train_config['train_type'] == 'ac':
-                    state = {'model': model.state_dict(), 'optimizer': optimizer.state_dict(), 'epoch': epoch,
-                             'critic_model': critic_model.state_dict(),
-                             'critic_optimizer': critic_optimizer.state_dict()}
-                else:
-                    state = {'model': model.state_dict(), 'optimizer': optimizer.state_dict(), 'epoch': epoch}
-                torch.save(state, model_filename)
-                logger.info("模型已存储到: {}".format(model_filename))
+        # 每interval个epoch，或者即将退出的时候，保存一次可继续训练的模型：
+        if epoch % train_config['save_model_epoch_interval'] == train_config['save_model_epoch_interval'] - 1 \
+                or now_exit:
+            model_filename = dir_name + "/" + time.strftime(
+                '%m%d%H%M', time.localtime(time.time())
+            ) + "_{:.2f}_{:.2f}_{:.2f}".format(valid_user_allo * 100,
+                                               valid_server_use * 100,
+                                               valid_capacity_use * 100) + '.pt'
+            if train_config['train_type'] == 'ac':
+                state = {'model': model.state_dict(), 'optimizer': optimizer.state_dict(), 'epoch': epoch,
+                         'critic_model': critic_model.state_dict(),
+                         'critic_optimizer': critic_optimizer.state_dict()}
+            else:
+                state = {'model': model.state_dict(), 'optimizer': optimizer.state_dict(), 'epoch': epoch}
+            torch.save(state, model_filename)
+            logger.info("模型已存储到: {}".format(model_filename))
 
-                if now_exit:
-                    return model_filename
+            if now_exit:
+                return model_filename
 
 
 if __name__ == '__main__':
