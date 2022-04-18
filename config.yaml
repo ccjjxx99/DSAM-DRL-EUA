@@ -1,12 +1,12 @@
 train:
-  batch_size: 64
+  batch_size: 88
   use_cuda: True
   lr: 3.0e-4
   beta: 0.9
   max_grad_norm: 2.
   epochs: 1000
-  train_type: 'RGRB'
-  wait_best_reward_epoch: 5
+  train_type: 'REINFORCE+RGRB'
+  wait_best_reward_epoch: 10
   save_model_epoch_interval: 5
   dir_name: '/home/inspur/cjx/data_dir'
   device: 'cuda:0'
@@ -16,7 +16,7 @@ data:
   y_end: 1
   min_cov: 1
   max_cov: 1.5
-  miu: 35
+  miu: 65
   sigma: 10
   data_size:
     train: 100000
@@ -24,8 +24,8 @@ data:
     test: 10000
 model:
   dropout: 0
-  capacity_reward_rate: 0.5
+  capacity_reward_rate: 1
   user_embedding_type: 'transformer'
   server_embedding_type: 'linear'
-  need_continue: True
-  continue_model_filename: '/home/inspur/cjx/data_dir/03291402_server_0.5_1_user_500_miu_35_sigma_10_transformer_linear_RGRB_capa_rate_0.5/03310240_85.11_90.59_62.12.mdl'
+  need_continue: False
+  continue_model_filename: ''

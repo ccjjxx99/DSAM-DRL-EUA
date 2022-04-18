@@ -30,9 +30,14 @@ def train(config):
                        server_embedding_type=model_config['server_embedding_type'])
     optimizer = Adam(model.parameters(), lr=train_config['lr'])
 
+    original_train_type = train_config['train_type']
+    if original_train_type == 'REINFORCE+RGRB':
+        now_train_type = 'REINFORCE'
+    else:
+        now_train_type = original_train_type
     critic_model = None
     critic_optimizer = None
-    if train_config['train_type'] == 'ac':
+    if now_train_type == 'ac':
         critic_model = CriticNet(6, 7, 256, device, model['dropout'],
                                  model['user_embedding_type'], model['server_embedding_type'])
         critic_optimizer = Adam(critic_model.parameters(), lr=train_config['lr'])
@@ -44,7 +49,7 @@ def train(config):
         optimizer.load_state_dict(checkpoint['optimizer'])
         start_epoch = checkpoint['epoch'] + 1
 
-        if train_config['train_type'] == 'ac':
+        if now_train_type == 'ac':
             critic_model.load_state_dict(checkpoint['critic_model'])
             critic_optimizer.load_state_dict(checkpoint['critic_optimizer'])
 
@@ -59,7 +64,7 @@ def train(config):
                + "_user_" + str(data_config['user_num']) \
                + "_miu_" + str(data_config['miu']) + "_sigma_" + str(data_config['sigma']) \
                + "_" + model_config['user_embedding_type'] + "_" + model_config['server_embedding_type'] \
-               + "_" + train_config['train_type'] + "_capa_rate_" + str(model_config['capacity_reward_rate'])
+               + "_" + now_train_type + "_capa_rate_" + str(model_config['capacity_reward_rate'])
     dir_name = os.path.join(train_config['dir_name'], dir_name)
     log_file_name = dir_name + '/log.log'
 
@@ -84,7 +89,7 @@ def train(config):
             reward, actions_probs, _, user_allocated_props, server_used_props, capacity_used_props, _ \
                 = model(user_seq, server_seq, masks)
 
-            if train_config['train_type'] == 'REINFORCE':
+            if now_train_type == 'REINFORCE':
                 if batch_idx == 0:
                     critic_exp_mvg_avg = reward.mean()
                 else:
@@ -92,7 +97,7 @@ def train(config):
                                          + ((1. - train_config['beta']) * reward.mean())
                 advantage = reward - critic_exp_mvg_avg
 
-            elif train_config['train_type'] == 'ac':
+            elif now_train_type == 'ac':
                 critic_reward = critic_model(user_seq, server_seq)
                 advantage = reward - critic_reward
                 # 训练critic网络
@@ -101,7 +106,7 @@ def train(config):
                 critic_loss.backward()
                 critic_optimizer.step()
 
-            elif train_config['train_type'] == 'RGRB':
+            elif now_train_type == 'RGRB':
                 model.policy = 'greedy'
                 with torch.no_grad():
                     reward2, _, _, _, _, _, _ = model(user_seq, server_seq, masks)
@@ -127,7 +132,7 @@ def train(config):
 
             critic_exp_mvg_avg = critic_exp_mvg_avg.detach()
 
-            if batch_idx % int(2048 / train_config['batch_size']) == 0:
+            if batch_idx % int(1024 / train_config['batch_size']) == 0:
                 logger.info(
                     'Epoch {}: Train [{}/{} ({:.1f}%)]\tR:{:.6f}\tuser_props: {:.6f}'
                     '\tserver_props: {:.6f}\tcapacity_props:{:.6f}'.format(
@@ -163,7 +168,7 @@ def train(config):
                 reward, _, _, user_allocated_props, server_used_props, capacity_used_props, _ \
                     = model(user_seq, server_seq, masks)
 
-                if batch_idx % int(2048 / train_config['batch_size']) == 0:
+                if batch_idx % int(1024 / train_config['batch_size']) == 0:
                     logger.info(
                         'Epoch {}: Valid [{}/{} ({:.1f}%)]\tR:{:.6f}\tuser_props: {:.6f}'
                         '\tserver_props: {:.6f}\tcapacity_props:{:.6f}'.format(
@@ -231,7 +236,7 @@ def train(config):
                 reward, _, _, user_allocated_props, server_used_props, capacity_used_props, _ \
                     = model(user_seq, server_seq, masks)
 
-                if batch_idx % int(2048 / train_config['batch_size']) == 0:
+                if batch_idx % int(1024 / train_config['batch_size']) == 0:
                     logger.info(
                         'Epoch {}: Test [{}/{} ({:.1f}%)]\tR:{:.6f}\tuser_props: {:.6f}'
                         '\tserver_props: {:.6f}\tcapacity_props:{:.6f}'.format(
@@ -291,7 +296,7 @@ def train(config):
             ) + "_{:.2f}_{:.2f}_{:.2f}".format(valid_user_allo * 100,
                                                valid_server_use * 100,
                                                valid_capacity_use * 100) + '.pt'
-            if train_config['train_type'] == 'ac':
+            if now_train_type == 'ac':
                 state = {'model': model.state_dict(), 'optimizer': optimizer.state_dict(), 'epoch': epoch,
                          'critic_model': critic_model.state_dict(),
                          'critic_optimizer': critic_optimizer.state_dict()}
@@ -301,7 +306,14 @@ def train(config):
             logger.info("模型已存储到: {}".format(model_filename))
 
             if now_exit:
-                return model_filename
+                if original_train_type == 'REINFORCE+RGRB':
+                    if now_train_type == 'REINFORCE':
+                        now_train_type = 'RGRB'
+                        logger.info("REINFORCE无进步，已切换训练方式为RGRB")
+                        now_exit = False
+                        best_time = 0
+                    else:
+                        return model_filename
 
 
 if __name__ == '__main__':
