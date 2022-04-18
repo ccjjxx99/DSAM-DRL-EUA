@@ -6,6 +6,7 @@ train:
   max_grad_norm: 2.
   epochs: 1000
   train_type: 'REINFORCE+RGRB'
+  exploration_c: 10
   wait_best_reward_epoch: 10
   save_model_epoch_interval: 5
   dir_name: '/home/inspur/cjx/data_dir'

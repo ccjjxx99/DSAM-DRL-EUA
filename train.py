@@ -29,7 +29,7 @@ def train(config):
                        user_embedding_type=model_config['user_embedding_type'],
                        server_embedding_type=model_config['server_embedding_type'])
     optimizer = Adam(model.parameters(), lr=train_config['lr'])
-
+    exploration_c = train_config['exploration_c']
     original_train_type = train_config['train_type']
     if original_train_type == 'REINFORCE+RGRB':
         now_train_type = 'REINFORCE'
@@ -87,7 +87,7 @@ def train(config):
             server_seq, user_seq, masks = server_seq.to(device), user_seq.to(device), masks.to(device)
 
             reward, actions_probs, _, user_allocated_props, server_used_props, capacity_used_props, _ \
-                = model(user_seq, server_seq, masks)
+                = model(user_seq, server_seq, masks, exploration_c)
 
             if now_train_type == 'REINFORCE':
                 if batch_idx == 0:
@@ -109,7 +109,7 @@ def train(config):
             elif now_train_type == 'RGRB':
                 model.policy = 'greedy'
                 with torch.no_grad():
-                    reward2, _, _, _, _, _, _ = model(user_seq, server_seq, masks)
+                    reward2, _, _, _, _, _, _ = model(user_seq, server_seq, masks, exploration_c)
                     advantage = reward - reward2
                 model.policy = 'sample'
 
@@ -166,7 +166,7 @@ def train(config):
                 server_seq, user_seq, masks = server_seq.to(device), user_seq.to(device), masks.to(device)
 
                 reward, _, _, user_allocated_props, server_used_props, capacity_used_props, _ \
-                    = model(user_seq, server_seq, masks)
+                    = model(user_seq, server_seq, masks, exploration_c)
 
                 if batch_idx % int(1024 / train_config['batch_size']) == 0:
                     logger.info(
@@ -234,7 +234,7 @@ def train(config):
                 server_seq, user_seq, masks = server_seq.to(device), user_seq.to(device), masks.to(device)
 
                 reward, _, _, user_allocated_props, server_used_props, capacity_used_props, _ \
-                    = model(user_seq, server_seq, masks)
+                    = model(user_seq, server_seq, masks, exploration_c)
 
                 if batch_idx % int(1024 / train_config['batch_size']) == 0:
                     logger.info(
