@@ -314,6 +314,8 @@ def train(config):
                         best_time = 0
                     else:
                         return model_filename
+                else:
+                    return model_filename
 
 
 if __name__ == '__main__':
