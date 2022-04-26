@@ -83,3 +83,18 @@ def get_dataset(x_end, y_end, miu, sigma, user_num, data_size: {}, min_cov, max_
         datasets[set_type] = EuaDataset(servers, **data, device=device)
 
     return datasets
+
+
+def shuffle_dataset(test_set):
+    new_users = []
+    new_masks = []
+    for i in range(len(test_set)):
+        x = zip(test_set.users_list[i], test_set.users_masks_list[i])
+        x = list(x)
+        np.random.shuffle(x)
+        new_user, new_mask = zip(*x)
+        new_users.append(new_user)
+        new_masks.append(new_mask)
+    new_users_array = np.stack(new_users)
+    new_masks_array = np.stack(new_masks)
+    return EuaDataset(test_set.servers, new_users_array, new_masks_array, test_set.device)
