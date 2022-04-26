@@ -27,7 +27,7 @@ def random_allocate(servers, users, user_masks):
         server_allocate_num[allocated_server_id] += 1
 
     # 复制一份server，防止改变工作负载源数据
-    tmp_server_capacity = copy.deepcopy([server[3:] for server in servers])
+    tmp_server_capacity = np.array(copy.deepcopy([server[3:] for server in servers]))
     # 为每一个用户分配一个服务器
     for user_id in range(user_num):
         user = users[user_id]
@@ -61,8 +61,7 @@ def random_allocate(servers, users, user_masks):
     server_allocate_mat = np.array(server_allocate_num) > 0
     used_original_server = servers[server_allocate_mat]
     original_servers_capacity = used_original_server[:, 3:]
-    servers_remain = servers[server_allocate_mat]
-    servers_remain_capacity = servers_remain[:, 3:]
+    servers_remain_capacity = tmp_server_capacity[server_allocate_mat]
     sum_all_capacity = original_servers_capacity.sum()
     sum_remain_capacity = servers_remain_capacity.sum()
     capacity_used_prop = 1 - sum_remain_capacity / sum_all_capacity
