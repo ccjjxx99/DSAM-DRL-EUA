@@ -1,4 +1,5 @@
 import copy
+import numpy as np
 
 from util.utils import mask_trans_to_list
 
@@ -52,4 +53,15 @@ def greedy_allocate(servers, users, user_masks):
     used_server_num = server_num - server_allocate_num.count(0)
     server_used_prop = used_server_num / server_num
 
-    return user_allocate_list, server_allocate_num, user_allocated_prop, server_used_prop
+    # 已使用的服务器的资源利用率
+    server_allocate_mat = np.array(server_allocate_num) > 0
+    used_original_server = servers[server_allocate_mat]
+    original_servers_capacity = used_original_server[:, 3:]
+    servers_remain = servers[server_allocate_mat]
+    servers_remain_capacity = servers_remain[:, 3:]
+    sum_all_capacity = original_servers_capacity.sum()
+    sum_remain_capacity = servers_remain_capacity.sum()
+    capacity_used_prop = 1 - sum_remain_capacity / sum_all_capacity
+
+    return None, None, user_allocate_list, server_allocate_num, \
+        user_allocated_prop, server_used_prop, capacity_used_prop
