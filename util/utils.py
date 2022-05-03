@@ -186,7 +186,6 @@ def calc_masks_by_test_set(test_set):
             print("出大问题")
 
 
-
 def mask_trans_to_list(user_masks, server_num):
     x = []
     user_masks = user_masks.astype(np.bool)

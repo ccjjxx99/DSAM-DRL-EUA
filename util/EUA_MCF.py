@@ -11,8 +11,12 @@ def can_allocate(workload, capacity):
     return True
 
 
-def EUA_MCF(original_servers, original_users, user_masks):
-    users = sorted(original_users, key=lambda u: u[2])
+def mcf_allocate(original_servers, original_users, original_masks):
+    x = zip(original_users, original_masks)
+    x = list(x)
+    x = sorted(x, key=lambda u: u[0][2])
+    users, user_masks = zip(*x)
+    users, user_masks = np.array(users, dtype=np.float), np.array(user_masks, dtype=np.bool)
     user_num = len(users)
     server_num = len(original_servers)
     user_within_servers = mask_trans_to_list(user_masks, server_num)
