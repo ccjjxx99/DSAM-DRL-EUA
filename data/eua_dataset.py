@@ -50,9 +50,13 @@ class EuaDatasetNeedSort(Dataset):
     def __getitem__(self, index):
         # 先排序
         original_users = self.users_list[index]
-        users = sorted(original_users, key=lambda u: u[2])
-        user_seq = torch.tensor(original_users, dtype=torch.float32, device=self.device)
-        mask_seq = torch.tensor(self.users_masks_list[index], dtype=torch.bool, device=self.device)
+        original_masks = self.users_masks_list[index]
+        x = zip(original_users, original_masks)
+        x = list(x)
+        x = sorted(x, key=lambda u: u[0][2])
+        new_user, new_mask = zip(*x)
+        user_seq = torch.tensor(np.array(new_user, dtype=np.float), dtype=torch.float32, device=self.device)
+        mask_seq = torch.tensor(np.array(new_mask, dtype=np.bool), dtype=torch.bool, device=self.device)
         return self.servers_tensor, user_seq, mask_seq
 
 
