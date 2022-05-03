@@ -188,7 +188,7 @@ class PointerNet(nn.Module):
         capacity_used_props = 1 - sum_remain_capacity / sum_all_capacity
         return user_allocated_props, server_used_props, capacity_used_props
 
-    def forward(self, user_input_seq, server_input_seq, masks, exploration_c):
+    def forward(self, user_input_seq, server_input_seq, masks, exploration_c=10):
         if self.beam_num != 1:
             return self.beam_forward(user_input_seq, server_input_seq, masks, exploration_c)
 

@@ -122,7 +122,7 @@ def test_by_model_and_set(model, batch_size, test_set, device):
         test_user_allo = torch.mean(test_user_allocated_props_list)
         test_server_use = torch.mean(test_server_used_props_list)
         test_capacity_use = torch.mean(test_capacity_used_props_list)
-        print('Ptr:\t', test_user_allo.item(), test_server_use.item(), test_capacity_use.item())
+        print('AM-DRL:\t', test_user_allo.item(), test_server_use.item(), test_capacity_use.item())
 
 
 def test_by_model_and_set_without_batch(model, test_set, device):
@@ -154,7 +154,37 @@ def test_by_model_and_set_without_batch(model, test_set, device):
         test_user_allo = np.mean(test_user_allocated_props_list)
         test_server_use = np.mean(test_server_used_props_list)
         test_capacity_use = np.mean(test_capacity_used_props_list)
-        print('Ptr:\t', test_user_allo.item(), test_server_use.item(), test_capacity_use.item())
+        print('AM-DRL:\t', test_user_allo.item(), test_server_use.item(), test_capacity_use.item())
+
+
+def in_coverage(user, server):
+    return np.linalg.norm(user[:2] - server[:2]) <= server[2]
+
+
+def calc_masks_by_test_set(test_set):
+    server_list = test_set.servers
+    users_list, users_masks_list = test_set.users_list, test_set.users_masks_list
+
+    for k in trange(len(test_set)):
+        user_list = users_list[k]
+        users_masks = np.zeros((len(user_list), len(server_list)), dtype=np.bool)
+
+        def calc_user_within(calc_user, index):
+            flag = False
+            for j in range(len(server_list)):
+                if in_coverage(calc_user, server_list[j]):
+                    users_masks[index, j] = 1
+                    flag = True
+            return flag
+
+        for i in range(len(user_list)):
+            user = user_list[i]
+            user_within = calc_user_within(user, i)
+            if not user_within:
+                print("出大问题")
+        if not (users_masks == users_masks_list[k]).all():
+            print("出大问题")
+
 
 
 def mask_trans_to_list(user_masks, server_num):

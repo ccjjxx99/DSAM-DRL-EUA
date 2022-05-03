@@ -38,6 +38,24 @@ class EuaDataset(Dataset):
         return self.servers_tensor, user_seq, mask_seq
 
 
+class EuaDatasetNeedSort(Dataset):
+    def __init__(self, servers, users_list, users_masks_list, device):
+        self.servers, self.users_list, self.users_masks_list = servers, users_list, users_masks_list
+        self.servers_tensor = torch.tensor(servers, dtype=torch.float32, device=device)
+        self.device = device
+
+    def __len__(self):
+        return len(self.users_list)
+
+    def __getitem__(self, index):
+        # 先排序
+        original_users = self.users_list[index]
+        users = sorted(original_users, key=lambda u: u[2])
+        user_seq = torch.tensor(original_users, dtype=torch.float32, device=self.device)
+        mask_seq = torch.tensor(self.users_masks_list[index], dtype=torch.bool, device=self.device)
+        return self.servers_tensor, user_seq, mask_seq
+
+
 def get_dataset(x_end, y_end, miu, sigma, user_num, data_size: {}, min_cov, max_cov, device, dir_name):
     """
     获取dataset
