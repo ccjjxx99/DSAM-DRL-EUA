@@ -11,7 +11,6 @@ lr = 1e-4
 beta = 0.9
 max_grad_norm = 2.
 epochs = 1000
-dropout = 0
 capacity_reward_rate = 0.2
 user_num = 200
 resource_rate = 3
@@ -36,7 +35,7 @@ with open(test_filename, 'rb') as f:
     test_set = pickle.load(f)
 
 print("正在加载模型")
-model = PointerNet(6, 7, 256, device=device, dropout=dropout, capacity_reward_rate=capacity_reward_rate,
+model = PointerNet(6, 7, 256, device=device, capacity_reward_rate=capacity_reward_rate,
                    user_embedding_type=user_embedding_type, server_embedding_type=server_embedding_type)
 
 model_filename = "D:/transformer_eua/model/" \
@@ -66,15 +65,15 @@ with torch.no_grad():
         beam_server_used_props_list.append(server_used_props)
         beam_capacity_used_props_list.append(capacity_used_props)
 
-        print('{} Test [{}/{} ({:.1f}%)]\tR:{:.6f}\tuser_props: {:.6f}'
-              '\tserver_props: {:.6f}\tcapacity_props:{:.6f}'.format(time.strftime('%H:%M:%S', time.localtime(time.time())),
-                                                                     (batch_idx + 1) * len(user_seq),
-                                                                     test_size,
-                                                                     100. * (batch_idx + 1) / len(test_loader),
-                                                                     torch.mean(reward),
-                                                                     torch.mean(user_allocated_props),
-                                                                     torch.mean(server_used_props),
-                                                                     torch.mean(capacity_used_props)))
+        print('{} Test [{}/{} ({:.1f}%)]\tR:{:.6f}\tuser_props: {:.6f}\tserver_props: {:.6f}'
+              '\tcapacity_props:{:.6f}'.format(time.strftime('%H:%M:%S', time.localtime(time.time())),
+                                               (batch_idx + 1) * len(user_seq),
+                                               test_size,
+                                               100. * (batch_idx + 1) / len(test_loader),
+                                               torch.mean(reward),
+                                               torch.mean(user_allocated_props),
+                                               torch.mean(server_used_props),
+                                               torch.mean(capacity_used_props)))
 
     beam_R_list = torch.cat(beam_R_list)
     beam_user_allocated_props_list = torch.cat(beam_user_allocated_props_list)

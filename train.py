@@ -24,7 +24,7 @@ def train(config):
     valid_loader = DataLoader(dataset=dataset['valid'], batch_size=train_config['batch_size'], shuffle=False)
     test_loader = DataLoader(dataset=dataset['test'], batch_size=train_config['batch_size'], shuffle=False)
 
-    model = PointerNet(6, 7, 256, device=device, dropout=model_config['dropout'],
+    model = PointerNet(6, 7, 256, device=device,
                        capacity_reward_rate=model_config['capacity_reward_rate'],
                        user_embedding_type=model_config['user_embedding_type'],
                        server_embedding_type=model_config['server_embedding_type'])
@@ -38,8 +38,7 @@ def train(config):
     critic_model = None
     critic_optimizer = None
     if now_train_type == 'ac':
-        critic_model = CriticNet(6, 7, 256, device, model['dropout'],
-                                 model['user_embedding_type'], model['server_embedding_type'])
+        critic_model = CriticNet(6, 7, 256, device, model['user_embedding_type'], model['server_embedding_type'])
         critic_optimizer = Adam(critic_model.parameters(), lr=train_config['lr'])
 
     # 加载需要继续训练的模型

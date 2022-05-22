@@ -2,26 +2,24 @@ import math
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from nets.graph_encoder import GraphAttentionEncoder
 
 
 class UserEncoder(nn.Module):
     def __init__(self, input_dim, hidden_dim, n_heads=8, n_layers=6,
-                 normalization='batch', feed_forward_hidden=512, dropout=0.5, embedding_type='linear'):
+                 normalization='batch', feed_forward_hidden=512, embedding_type='linear'):
         super(UserEncoder, self).__init__()
         self.embedding_type = embedding_type
         if embedding_type == 'transformer':
             self.embedding = GraphAttentionEncoder(n_heads, hidden_dim, n_layers,
-                                                   input_dim, normalization, feed_forward_hidden, dropout=dropout)
+                                                   input_dim, normalization, feed_forward_hidden)
         elif embedding_type == 'linear':
             self.embedding = nn.Linear(input_dim, hidden_dim)
         elif embedding_type == 'lstm':
             self.embedding = nn.LSTM(input_size=input_dim, hidden_size=hidden_dim,
-                                     batch_first=True, dropout=dropout)
+                                     batch_first=True)
         else:
             raise NotImplementedError
-        self.dropout = nn.Dropout(dropout)
 
     def forward(self, inputs):
         if self.embedding == 'lstm':
@@ -29,38 +27,36 @@ class UserEncoder(nn.Module):
             embedded, _ = self.embedding(flipped)
             return torch.flip(embedded, dims=[1])
         else:
-            return self.dropout(self.embedding(inputs))
+            return self.embedding(inputs)
 
 
 class ServerEncoder(nn.Module):
     def __init__(self, input_dim, hidden_dim, n_heads=8, n_layers=6,
-                 normalization='batch', feed_forward_hidden=512, dropout=0.5, embedding_type='linear'):
+                 normalization='batch', feed_forward_hidden=512, embedding_type='linear'):
         super(ServerEncoder, self).__init__()
         self.embedding_type = embedding_type
         if embedding_type == 'transformer':
             self.embedding = GraphAttentionEncoder(n_heads, hidden_dim, n_layers,
-                                                   input_dim, normalization, feed_forward_hidden, dropout=dropout)
+                                                   input_dim, normalization, feed_forward_hidden)
         elif embedding_type == 'linear':
             self.embedding = nn.Linear(input_dim, hidden_dim)
         else:
             raise NotImplementedError
-        self.dropout = nn.Dropout(dropout)
 
     def forward(self, inputs):
-        return self.dropout(self.embedding(inputs))
+        return self.embedding(inputs)
 
 
 class Glimpse(nn.Module):
     # input :
     # query:    batch_size * 1 * query_input_dim
     # ref:      batch_size * seq_len * ref_hidden_dim
-    def __init__(self, input_dim, hidden_dim, dropout=0.5):
+    def __init__(self, hidden_dim):
         super(Glimpse, self).__init__()
-        self.q = nn.Linear(input_dim, hidden_dim)
+        self.q = nn.Linear(hidden_dim, hidden_dim)
         self.k = nn.Linear(hidden_dim, hidden_dim)
         self.v = nn.Linear(hidden_dim, hidden_dim)
         self._norm_fact = 1 / math.sqrt(hidden_dim)
-        self.dropout = nn.Dropout(dropout)
 
     def forward(self, query, ref):
         Q = self.q(query)  # Q: batch_size * 1 * hidden_dim
@@ -70,21 +66,20 @@ class Glimpse(nn.Module):
         attn = nn.Softmax(dim=-1)(
             torch.bmm(Q, K.permute(0, 2, 1))) * self._norm_fact  # Q * K.T() # batch_size * 1 * seq_len
 
-        output = self.dropout(torch.bmm(attn, V))  # Q * K.T() * V # batch_size * 1 * hidden_dim
+        output = torch.bmm(attn, V)  # Q * K.T() * V # batch_size * 1 * hidden_dim
         # 混合了所有服务器的相似度的一个表示服务器的变量
         return output
 
 
 class Attention(nn.Module):
-    def __init__(self, hidden_dim, dropout=0.1):
+    def __init__(self, hidden_dim):
         super(Attention, self).__init__()
         self.hidden_size = hidden_dim
         self.W1 = nn.Linear(hidden_dim, hidden_dim, bias=False)
         self.W2 = nn.Linear(hidden_dim, hidden_dim, bias=False)
         self.vt = nn.Linear(hidden_dim, 1, bias=False)
-        self.dropout = nn.Dropout(dropout)
 
-    def forward(self, decoder_state, encoder_outputs, mask):
+    def forward(self, decoder_state, encoder_outputs, mask, exploration_c):
         # (batch_size, max_seq_len, hidden_size)
         encoder_transform = self.W1(encoder_outputs)
 
@@ -92,31 +87,30 @@ class Attention(nn.Module):
         decoder_transform = self.W2(decoder_state)
 
         # (batch_size, max_seq_len, 1) => (batch_size, max_seq_len)
-        u_i = self.dropout(self.vt(torch.tanh(encoder_transform + decoder_transform)).squeeze(-1))
+        u_i = self.vt(torch.tanh(encoder_transform + decoder_transform)).squeeze(-1)
 
         # softmax with only valid inputs, excluding zero padded parts
         # log_softmax for a better numerical stability
-        score = u_i.masked_fill(~mask, value=torch.log(torch.tensor(1e-45)))
-        return score
+        score = u_i.masked_fill(~mask, value=torch.log(torch.tensor(1e-45))) * exploration_c
+        prob = torch.softmax(score, dim=-1)
+        return prob
 
 
 class PointerNet(nn.Module):
-    def __init__(self, user_input_dim, server_input_dim, hidden_dim, device, capacity_reward_rate, dropout=0.1,
+    def __init__(self, user_input_dim, server_input_dim, hidden_dim, device, capacity_reward_rate,
                  policy='sample', user_embedding_type='linear', server_embedding_type='linear', beam_num=1):
         super(PointerNet, self).__init__()
         # decoder hidden size
         self.hidden_dim = hidden_dim
         self.device = device
 
-        self.user_encoder = UserEncoder(user_input_dim, hidden_dim, dropout=dropout,
-                                        embedding_type=user_embedding_type).to(device)
-        self.server_encoder = ServerEncoder(server_input_dim + 1, hidden_dim, dropout=dropout,
+        self.user_encoder = UserEncoder(user_input_dim, hidden_dim,embedding_type=user_embedding_type).to(device)
+        self.server_encoder = ServerEncoder(server_input_dim + 1, hidden_dim,
                                             embedding_type=server_embedding_type).to(device)
 
         # glimpse输入（用户，上次选择的服务器），维度为2*dim， 跟所有的服务器作相似度并输出融合后的服务器
-        self.glimpse = Glimpse(hidden_dim, hidden_dim, dropout=dropout).to(device)
-        self.pointer = Attention(hidden_dim, dropout=dropout).to(device)
-        self.sm = nn.Softmax(dim=1).to(device)
+        self.glimpse = Glimpse(hidden_dim).to(device)
+        self.pointer = Attention(hidden_dim).to(device)
         self.capacity_reward_rate = capacity_reward_rate
         self.policy = policy
         self.beam_num = beam_num
@@ -131,9 +125,8 @@ class PointerNet(nn.Module):
 
         # get a pointer distribution over the encoder outputs using attention
         # (batch_size, server_len)
-        logits = self.pointer(server_glimpse, server_encoder_outputs, mask) * exploration_c
+        probs = self.pointer(server_glimpse, server_encoder_outputs, mask, exploration_c)
         # (batch_size, server_len)
-        probs = F.softmax(logits, dim=1)
 
         if self.policy == 'sample':
             # (batch_size, 1)
@@ -401,15 +394,15 @@ def can_allocate(workload: torch.Tensor, capacity: torch.Tensor):
 
 
 class CriticNet(nn.Module):
-    def __init__(self, user_input_dim, server_input_dim, hidden_dim, device, dropout=0.1,
+    def __init__(self, user_input_dim, server_input_dim, hidden_dim, device,
                  user_embedding_type='linear', server_embedding_type='linear'):
         super(CriticNet, self).__init__()
         self.hidden_dim = hidden_dim
         self.device = device
 
-        self.user_encoder = UserEncoder(user_input_dim, hidden_dim, dropout=dropout,
+        self.user_encoder = UserEncoder(user_input_dim, hidden_dim,
                                         embedding_type=user_embedding_type).to(device)
-        self.server_encoder = ServerEncoder(server_input_dim, hidden_dim, dropout=dropout,
+        self.server_encoder = ServerEncoder(server_input_dim, hidden_dim,
                                             embedding_type=server_embedding_type).to(device)
         self.fusion = nn.Linear(hidden_dim * 2, hidden_dim, device=device)
         self.out = nn.Linear(hidden_dim, 1, device=device)

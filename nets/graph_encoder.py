@@ -5,23 +5,26 @@ import math
 
 
 class SkipConnection(nn.Module):
-    def __init__(self, module, dropout=0.5):
+
+    def __init__(self, module):
         super(SkipConnection, self).__init__()
         self.module = module
-        self.dropout = nn.Dropout(dropout)
 
-    def forward(self, input_data):
-        return input_data + self.dropout(self.module(input_data))
+    def forward(self, input):
+        return input + self.module(input)
 
 
 class MultiHeadAttention(nn.Module):
-    def __init__(self,
-                 n_heads,
-                 input_dim,
-                 embed_dim,
-                 val_dim=None,
-                 key_dim=None):
+    def __init__(
+            self,
+            n_heads,
+            input_dim,
+            embed_dim,
+            val_dim=None,
+            key_dim=None
+    ):
         super(MultiHeadAttention, self).__init__()
+
         if val_dim is None:
             val_dim = embed_dim // n_heads
         if key_dim is None:
@@ -33,7 +36,7 @@ class MultiHeadAttention(nn.Module):
         self.val_dim = val_dim
         self.key_dim = key_dim
 
-        self.norm_factor = 1 / math.sqrt(key_dim)
+        self.norm_factor = 1 / math.sqrt(key_dim)  # See Attention is all you need
 
         self.W_query = nn.Parameter(torch.Tensor(n_heads, input_dim, key_dim))
         self.W_key = nn.Parameter(torch.Tensor(n_heads, input_dim, key_dim))
@@ -44,6 +47,7 @@ class MultiHeadAttention(nn.Module):
         self.init_parameters()
 
     def init_parameters(self):
+
         for param in self.parameters():
             stdv = 1. / math.sqrt(param.size(-1))
             param.data.uniform_(-stdv, stdv)
@@ -54,11 +58,11 @@ class MultiHeadAttention(nn.Module):
         :param q: queries (batch_size, n_query, input_dim)
         :param h: data (batch_size, graph_size, input_dim)
         :param mask: mask (batch_size, n_query, graph_size) or viewable as that (i.e. can be 2 dim if n_query == 1)
-                        Mask should contain 1 if attention is not possible (i.e. mask is negative adjacency)
+        Mask should contain 1 if attention is not possible (i.e. mask is negative adjacency)
         :return:
         """
         if h is None:
-            h = q
+            h = q  # compute self-attention
 
         # h should be (batch_size, graph_size, input_dim)
         batch_size, graph_size, input_dim = h.size()
@@ -116,6 +120,7 @@ class MultiHeadAttention(nn.Module):
 
 
 class Normalization(nn.Module):
+
     def __init__(self, embed_dim, normalization='batch'):
         super(Normalization, self).__init__()
 
@@ -130,11 +135,13 @@ class Normalization(nn.Module):
         # self.init_parameters()
 
     def init_parameters(self):
+
         for name, param in self.named_parameters():
             stdv = 1. / math.sqrt(param.size(-1))
             param.data.uniform_(-stdv, stdv)
 
     def forward(self, input):
+
         if isinstance(self.normalizer, nn.BatchNorm1d):
             return self.normalizer(input.view(-1, input.size(-1))).view(*input.size())
         elif isinstance(self.normalizer, nn.InstanceNorm1d):
@@ -145,60 +152,61 @@ class Normalization(nn.Module):
 
 
 class MultiHeadAttentionLayer(nn.Sequential):
-    def __init__(self,
-                 n_heads,
-                 embed_dim,
-                 feed_forward_hidden=512,
-                 normalization='batch',
-                 dropout=0.5):
+
+    def __init__(
+            self,
+            n_heads,
+            embed_dim,
+            feed_forward_hidden=512,
+            normalization='batch',
+    ):
         super(MultiHeadAttentionLayer, self).__init__(
             SkipConnection(
                 MultiHeadAttention(
                     n_heads,
                     input_dim=embed_dim,
                     embed_dim=embed_dim
-                ),
-                dropout=dropout
+                )
             ),
             Normalization(embed_dim, normalization),
             SkipConnection(
                 nn.Sequential(
                     nn.Linear(embed_dim, feed_forward_hidden),
                     nn.ReLU(),
-                    nn.Dropout(dropout),
                     nn.Linear(feed_forward_hidden, embed_dim)
-                ) if feed_forward_hidden > 0 else nn.Linear(embed_dim, embed_dim),
-                dropout=dropout
+                ) if feed_forward_hidden > 0 else nn.Linear(embed_dim, embed_dim)
             ),
             Normalization(embed_dim, normalization)
         )
 
 
 class GraphAttentionEncoder(nn.Module):
-    def __init__(self,
-                 n_heads,
-                 embed_dim,
-                 n_layers,
-                 node_dim=None,
-                 normalization='batch',
-                 feed_forward_hidden=512,
-                 dropout=0.5):
+    def __init__(
+            self,
+            n_heads,
+            embed_dim,
+            n_layers,
+            node_dim=None,
+            normalization='batch',
+            feed_forward_hidden=512
+    ):
         super(GraphAttentionEncoder, self).__init__()
 
         # To map input to embedding space
         self.init_embed = nn.Linear(node_dim, embed_dim) if node_dim is not None else None
-        self.dropout = nn.Dropout(dropout)
+
         self.layers = nn.Sequential(*(
-            MultiHeadAttentionLayer(n_heads, embed_dim, feed_forward_hidden, normalization, dropout=dropout)
+            MultiHeadAttentionLayer(n_heads, embed_dim, feed_forward_hidden, normalization)
             for _ in range(n_layers)
         ))
 
     def forward(self, x, mask=None):
+
         assert mask is None, "TODO mask not yet supported!"
 
         # Batch multiply to get initial embeddings of nodes
         h = self.init_embed(x.view(-1, x.size(-1))).view(*x.size()[:2], -1) if self.init_embed is not None else x
-        h = self.dropout(h)
+
         h = self.layers(h)
 
         return h    # (batch_size, graph_size, embed_dim)
