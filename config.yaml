@@ -3,10 +3,8 @@ train:
   use_cuda: True
   lr: 3.0e-4
   beta: 0.9
-  max_grad_norm: 2.
   epochs: 1000
   train_type: 'RGRB'
-  exploration_c: 10
   wait_best_reward_epoch: 10
   save_model_epoch_interval: 5
   dir_name: 'D:/transformer_eua'
@@ -24,6 +22,7 @@ data:
     valid: 10000
     test: 10000
 model:
+  exploration_c: 10
   capacity_reward_rate: 1
   user_embedding_type: 'transformer'
   server_embedding_type: 'linear'

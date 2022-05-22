@@ -1,6 +1,6 @@
 from torch.utils.data import DataLoader
 import torch
-from nets.attention_net import PointerNet
+from nets.attention_net import AttentionNet
 import pickle
 import time
 
@@ -35,8 +35,8 @@ with open(test_filename, 'rb') as f:
     test_set = pickle.load(f)
 
 print("正在加载模型")
-model = PointerNet(6, 7, 256, device=device, capacity_reward_rate=capacity_reward_rate,
-                   user_embedding_type=user_embedding_type, server_embedding_type=server_embedding_type)
+model = AttentionNet(6, 7, 256, device=device, capacity_reward_rate=capacity_reward_rate,
+                     user_embedding_type=user_embedding_type, server_embedding_type=server_embedding_type)
 
 model_filename = "D:/transformer_eua/model/" \
                  "03111924_server_0.5_1_user_200_miu_35_sigma_10_transformer_linear_RGRB/03122134_96.32_55.01_51.61.mdl"

@@ -7,7 +7,7 @@ from torch.utils.tensorboard import SummaryWriter
 import torch.nn.functional as F
 import yaml
 
-from nets.attention_net import PointerNet, CriticNet
+from nets.attention_net import AttentionNet, CriticNet
 from util.utils import seed_torch, get_logger
 from data.eua_dataset import get_dataset
 
@@ -24,12 +24,11 @@ def train(config):
     valid_loader = DataLoader(dataset=dataset['valid'], batch_size=train_config['batch_size'], shuffle=False)
     test_loader = DataLoader(dataset=dataset['test'], batch_size=train_config['batch_size'], shuffle=False)
 
-    model = PointerNet(6, 7, 256, device=device,
-                       capacity_reward_rate=model_config['capacity_reward_rate'],
-                       user_embedding_type=model_config['user_embedding_type'],
-                       server_embedding_type=model_config['server_embedding_type'])
+    model = AttentionNet(6, 7, 256, device=device, exploration_c=model_config['exploration_c'],
+                         capacity_reward_rate=model_config['capacity_reward_rate'],
+                         user_embedding_type=model_config['user_embedding_type'],
+                         server_embedding_type=model_config['server_embedding_type'])
     optimizer = Adam(model.parameters(), lr=train_config['lr'])
-    exploration_c = train_config['exploration_c']
     original_train_type = train_config['train_type']
     if original_train_type == 'REINFORCE+RGRB':
         now_train_type = 'REINFORCE'
@@ -86,7 +85,7 @@ def train(config):
             server_seq, user_seq, masks = server_seq.to(device), user_seq.to(device), masks.to(device)
 
             reward, actions_probs, _, user_allocated_props, server_used_props, capacity_used_props, _ \
-                = model(user_seq, server_seq, masks, exploration_c)
+                = model(user_seq, server_seq, masks)
 
             if now_train_type == 'REINFORCE':
                 if batch_idx == 0:
@@ -108,7 +107,7 @@ def train(config):
             elif now_train_type == 'RGRB':
                 model.policy = 'greedy'
                 with torch.no_grad():
-                    reward2, _, _, _, _, _, _ = model(user_seq, server_seq, masks, exploration_c)
+                    reward2, _, _, _, _, _, _ = model(user_seq, server_seq, masks)
                     advantage = reward - reward2
                 model.policy = 'sample'
 
@@ -126,7 +125,6 @@ def train(config):
 
             optimizer.zero_grad()
             actor_loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), float(train_config['max_grad_norm']), norm_type=2)
             optimizer.step()
 
             critic_exp_mvg_avg = critic_exp_mvg_avg.detach()
@@ -165,7 +163,7 @@ def train(config):
                 server_seq, user_seq, masks = server_seq.to(device), user_seq.to(device), masks.to(device)
 
                 reward, _, _, user_allocated_props, server_used_props, capacity_used_props, _ \
-                    = model(user_seq, server_seq, masks, exploration_c)
+                    = model(user_seq, server_seq, masks)
 
                 if batch_idx % int(1024 / train_config['batch_size']) == 0:
                     logger.info(
@@ -233,7 +231,7 @@ def train(config):
                 server_seq, user_seq, masks = server_seq.to(device), user_seq.to(device), masks.to(device)
 
                 reward, _, _, user_allocated_props, server_used_props, capacity_used_props, _ \
-                    = model(user_seq, server_seq, masks, exploration_c)
+                    = model(user_seq, server_seq, masks)
 
                 if batch_idx % int(1024 / train_config['batch_size']) == 0:
                     logger.info(

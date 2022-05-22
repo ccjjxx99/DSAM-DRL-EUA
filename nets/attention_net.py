@@ -72,14 +72,15 @@ class Glimpse(nn.Module):
 
 
 class Attention(nn.Module):
-    def __init__(self, hidden_dim):
+    def __init__(self, hidden_dim, exploration_c=10):
         super(Attention, self).__init__()
         self.hidden_size = hidden_dim
         self.W1 = nn.Linear(hidden_dim, hidden_dim, bias=False)
         self.W2 = nn.Linear(hidden_dim, hidden_dim, bias=False)
         self.vt = nn.Linear(hidden_dim, 1, bias=False)
+        self.exploration_c = exploration_c
 
-    def forward(self, decoder_state, encoder_outputs, mask, exploration_c):
+    def forward(self, decoder_state, encoder_outputs, mask):
         # (batch_size, max_seq_len, hidden_size)
         encoder_transform = self.W1(encoder_outputs)
 
@@ -91,15 +92,15 @@ class Attention(nn.Module):
 
         # softmax with only valid inputs, excluding zero padded parts
         # log_softmax for a better numerical stability
-        score = u_i.masked_fill(~mask, value=torch.log(torch.tensor(1e-45))) * exploration_c
+        score = u_i.masked_fill(~mask, value=torch.log(torch.tensor(1e-45))) * self.exploration_c
         prob = torch.softmax(score, dim=-1)
         return prob
 
 
-class PointerNet(nn.Module):
-    def __init__(self, user_input_dim, server_input_dim, hidden_dim, device, capacity_reward_rate,
+class AttentionNet(nn.Module):
+    def __init__(self, user_input_dim, server_input_dim, hidden_dim, device, capacity_reward_rate, exploration_c=10,
                  policy='sample', user_embedding_type='linear', server_embedding_type='linear', beam_num=1):
-        super(PointerNet, self).__init__()
+        super(AttentionNet, self).__init__()
         # decoder hidden size
         self.hidden_dim = hidden_dim
         self.device = device
@@ -110,12 +111,12 @@ class PointerNet(nn.Module):
 
         # glimpse输入（用户，上次选择的服务器），维度为2*dim， 跟所有的服务器作相似度并输出融合后的服务器
         self.glimpse = Glimpse(hidden_dim).to(device)
-        self.pointer = Attention(hidden_dim).to(device)
+        self.pointer = Attention(hidden_dim, exploration_c).to(device)
         self.capacity_reward_rate = capacity_reward_rate
         self.policy = policy
         self.beam_num = beam_num
 
-    def choose_server_id(self, mask, user, static_server_seq, tmp_server_capacity, server_active, exploration_c):
+    def choose_server_id(self, mask, user, static_server_seq, tmp_server_capacity, server_active):
         """
         每一步根据用户和所有服务器，输出要选择的服务器
         """
@@ -125,7 +126,7 @@ class PointerNet(nn.Module):
 
         # get a pointer distribution over the encoder outputs using attention
         # (batch_size, server_len)
-        probs = self.pointer(server_glimpse, server_encoder_outputs, mask, exploration_c)
+        probs = self.pointer(server_glimpse, server_encoder_outputs, mask)
         # (batch_size, server_len)
 
         if self.policy == 'sample':
@@ -181,9 +182,9 @@ class PointerNet(nn.Module):
         capacity_used_props = 1 - sum_remain_capacity / sum_all_capacity
         return user_allocated_props, server_used_props, capacity_used_props
 
-    def forward(self, user_input_seq, server_input_seq, masks, exploration_c=10):
+    def forward(self, user_input_seq, server_input_seq, masks):
         if self.beam_num != 1:
-            return self.beam_forward(user_input_seq, server_input_seq, masks, exploration_c)
+            return self.beam_forward(user_input_seq, server_input_seq, masks)
 
         batch_size = user_input_seq.size(0)
         user_len = user_input_seq.size(1)
@@ -207,8 +208,7 @@ class PointerNet(nn.Module):
             mask = masks[:, i]
             user_code = user_encoder_outputs[:, i, :].unsqueeze(1)
             prob, idx = self.choose_server_id(mask, user_code, static_server_seq, tmp_server_capacity,
-                                              server_allocate_mat[:, :-1].unsqueeze(-1),
-                                              exploration_c)
+                                              server_allocate_mat[:, :-1].unsqueeze(-1))
 
             action_probs.append(prob)
             action_idx.append(idx)
@@ -231,7 +231,7 @@ class PointerNet(nn.Module):
         return -(user_allocated_props + self.capacity_reward_rate * capacity_used_props), action_probs, \
             action_idx, user_allocated_props, server_used_props, capacity_used_props, user_allocate_list
 
-    def beam_forward(self, user_input_seq, server_input_seq, masks, exploration_c):
+    def beam_forward(self, user_input_seq, server_input_seq, masks):
         batch_size = user_input_seq.size(0)
         user_len = user_input_seq.size(1)
         server_len = server_input_seq.size(1)
@@ -269,8 +269,7 @@ class PointerNet(nn.Module):
                 # prob: (batch_size, b); idx: (batch_size, b)
                 prob, idx = self.choose_server_id(mask, user_code, static_server_seq,
                                                   now_server_capacities[:, m],
-                                                  server_allocate_mats[:, m, :-1].unsqueeze(-1),
-                                                  exploration_c)
+                                                  server_allocate_mats[:, m, :-1].unsqueeze(-1))
 
                 # 此时产生了b个结果，把所有结果都先放在tmp中
                 prob = torch.log(prob)
