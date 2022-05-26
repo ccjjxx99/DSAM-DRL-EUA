@@ -23,6 +23,7 @@ data:
     test: 10000
 model:
   exploration_c: 10
+  user_scale_alpha : 0.05
   capacity_reward_rate: 1
   user_embedding_type: 'transformer'
   server_embedding_type: 'linear'

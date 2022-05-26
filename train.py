@@ -27,7 +27,8 @@ def train(config):
     model = AttentionNet(6, 7, 256, device=device, exploration_c=model_config['exploration_c'],
                          capacity_reward_rate=model_config['capacity_reward_rate'],
                          user_embedding_type=model_config['user_embedding_type'],
-                         server_embedding_type=model_config['server_embedding_type'])
+                         server_embedding_type=model_config['server_embedding_type'],
+                         user_scale_alpha=model_config['user_scale_alpha'])
     optimizer = Adam(model.parameters(), lr=train_config['lr'])
     original_train_type = train_config['train_type']
     if original_train_type == 'REINFORCE+RGRB':

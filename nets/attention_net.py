@@ -63,8 +63,9 @@ class Glimpse(nn.Module):
         K = self.k(ref)  # K: batch_size * seq_len * hidden_dim
         V = self.v(ref)  # V: batch_size * seq_len * hidden_dim
 
-        attn = nn.Softmax(dim=-1)(
-            torch.bmm(Q, K.permute(0, 2, 1))) * self._norm_fact  # Q * K.T() # batch_size * 1 * seq_len
+        attn_score = torch.bmm(Q, K.permute(0, 2, 1))
+        attn_score = attn_score * self._norm_fact
+        attn = torch.softmax(attn_score, dim=-1)    # Q * K.T() # batch_size * 1 * seq_len
 
         output = torch.bmm(attn, V)  # Q * K.T() * V # batch_size * 1 * hidden_dim
         # 混合了所有服务器的相似度的一个表示服务器的变量
@@ -72,20 +73,21 @@ class Glimpse(nn.Module):
 
 
 class Attention(nn.Module):
-    def __init__(self, hidden_dim, exploration_c=10):
+    def __init__(self, hidden_dim, exploration_c=10, user_scale_alpha=0.05):
         super(Attention, self).__init__()
         self.hidden_size = hidden_dim
         self.W1 = nn.Linear(hidden_dim, hidden_dim, bias=False)
         self.W2 = nn.Linear(hidden_dim, hidden_dim, bias=False)
         self.vt = nn.Linear(hidden_dim, 1, bias=False)
         self.exploration_c = exploration_c
+        self.user_scale_alpha = user_scale_alpha
 
     def forward(self, decoder_state, encoder_outputs, mask):
         # (batch_size, max_seq_len, hidden_size)
         encoder_transform = self.W1(encoder_outputs)
 
         # (batch_size, 1, hidden_size)
-        decoder_transform = self.W2(decoder_state)
+        decoder_transform = self.W2(decoder_state * self.user_scale_alpha)
 
         # (batch_size, max_seq_len, 1) => (batch_size, max_seq_len)
         u_i = self.vt(torch.tanh(encoder_transform + decoder_transform)).squeeze(-1)
@@ -99,7 +101,8 @@ class Attention(nn.Module):
 
 class AttentionNet(nn.Module):
     def __init__(self, user_input_dim, server_input_dim, hidden_dim, device, capacity_reward_rate, exploration_c=10,
-                 policy='sample', user_embedding_type='linear', server_embedding_type='linear', beam_num=1):
+                 policy='sample', user_embedding_type='linear', server_embedding_type='linear', user_scale_alpha=0.05,
+                 beam_num=1):
         super(AttentionNet, self).__init__()
         # decoder hidden size
         self.hidden_dim = hidden_dim
@@ -111,7 +114,7 @@ class AttentionNet(nn.Module):
 
         # glimpse输入（用户，上次选择的服务器），维度为2*dim， 跟所有的服务器作相似度并输出融合后的服务器
         self.glimpse = Glimpse(hidden_dim).to(device)
-        self.pointer = Attention(hidden_dim, exploration_c).to(device)
+        self.pointer = Attention(hidden_dim, exploration_c, user_scale_alpha).to(device)
         self.capacity_reward_rate = capacity_reward_rate
         self.policy = policy
         self.beam_num = beam_num
@@ -123,6 +126,7 @@ class AttentionNet(nn.Module):
         server_seq = torch.cat((static_server_seq, tmp_server_capacity, server_active), dim=-1)
         server_encoder_outputs = self.server_encoder(server_seq)
         server_glimpse = self.glimpse(user, server_encoder_outputs)
+        server_glimpse = server_glimpse
 
         # get a pointer distribution over the encoder outputs using attention
         # (batch_size, server_len)
