@@ -138,12 +138,12 @@ def train(config):
                         (batch_idx + 1) * len(user_seq),
                         data_config['data_size']['train'],
                         100. * (batch_idx + 1) / len(train_loader),
-                        torch.mean(reward),
+                        -torch.mean(reward),
                         torch.mean(user_allocated_props),
                         torch.mean(server_used_props),
                         torch.mean(capacity_used_props)))
 
-        tensorboard_writer.add_scalar('train/train_reward', torch.mean(reward), epoch)
+        tensorboard_writer.add_scalar('train/train_reward', -torch.mean(reward), epoch)
         tensorboard_writer.add_scalar('train/train_user_allocated_props', torch.mean(user_allocated_props), epoch)
         tensorboard_writer.add_scalar('train/train_server_used_props', torch.mean(server_used_props), epoch)
         tensorboard_writer.add_scalar('train/train_capacity_used_props', torch.mean(capacity_used_props), epoch)
@@ -174,7 +174,7 @@ def train(config):
                             (batch_idx + 1) * len(user_seq),
                             data_config['data_size']['valid'],
                             100. * (batch_idx + 1) / len(valid_loader),
-                            torch.mean(reward),
+                            -torch.mean(reward),
                             torch.mean(user_allocated_props),
                             torch.mean(server_used_props),
                             torch.mean(capacity_used_props)
@@ -194,9 +194,9 @@ def train(config):
             valid_server_use = torch.mean(valid_server_used_props_list)
             valid_capacity_use = torch.mean(valid_capacity_used_props_list)
             logger.info('Epoch {}: Valid \tR:{:.6f}\tuser_props: {:.6f}\tserver_props: {:.6f}\tcapacity_props:{:.6f}'
-                        .format(epoch, valid_r, valid_user_allo, valid_server_use, valid_capacity_use))
+                        .format(epoch, -valid_r, valid_user_allo, valid_server_use, valid_capacity_use))
 
-            tensorboard_writer.add_scalar('valid/valid_reward', valid_r, epoch)
+            tensorboard_writer.add_scalar('valid/valid_reward', -valid_r, epoch)
             tensorboard_writer.add_scalar('valid/valid_user_allocated_props', valid_user_allo, epoch)
             tensorboard_writer.add_scalar('valid/valid_server_used_props', valid_server_use, epoch)
             tensorboard_writer.add_scalar('valid/valid_capacity_used_props', valid_capacity_use, epoch)
@@ -242,7 +242,7 @@ def train(config):
                             (batch_idx + 1) * len(user_seq),
                             data_config['data_size']['test'],
                             100. * (batch_idx + 1) / len(valid_loader),
-                            torch.mean(reward),
+                            -torch.mean(reward),
                             torch.mean(user_allocated_props),
                             torch.mean(server_used_props),
                             torch.mean(capacity_used_props)
@@ -264,8 +264,8 @@ def train(config):
             test_capacity_use = torch.mean(test_capacity_used_props_list)
 
             logger.info('Epoch {}: Test \tR:{:.6f}\tuser_props: {:.6f}\tserver_props: {:.6f}\tcapacity_props:{:.6f}'
-                        .format(epoch, test_r, test_user_allo, test_server_use, test_capacity_use))
-            tensorboard_writer.add_scalar('test/test_reward', test_r, epoch)
+                        .format(epoch, -test_r, test_user_allo, test_server_use, test_capacity_use))
+            tensorboard_writer.add_scalar('test/test_reward', -test_r, epoch)
             tensorboard_writer.add_scalar('test/test_user_allocated_props', test_user_allo, epoch)
             tensorboard_writer.add_scalar('test/test_server_used_props', test_server_use, epoch)
             tensorboard_writer.add_scalar('test/test_capacity_used_props', test_capacity_use, epoch)
@@ -278,10 +278,10 @@ def train(config):
             for i in range(len(all_valid_reward_list)):
                 logger.info("Epoch: {}\treward: {:.6f}\tuser_props: {:.6f}"
                             "\tserver_props: {:.6f}\tcapacity_props: {:.6f}"
-                            .format(i, all_valid_reward_list[i], all_valid_user_list[i],
+                            .format(i, -all_valid_reward_list[i], all_valid_user_list[i],
                                     all_valid_server_list[i], all_valid_capacity_list[i]))
             logger.info("训练结束，最好的reward:{}，用户分配率:{:.2f}，服务器租用率:{:.2f}，资源利用率:{:.2f}"
-                        .format(best_r, best_user * 100, best_server * 100, best_capacity * 100))
+                        .format(-best_r, best_user * 100, best_server * 100, best_capacity * 100))
 
             # 保存一次可继续训练的模型就退出
             now_exit = True
