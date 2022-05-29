@@ -232,7 +232,7 @@ class AttentionNet(nn.Module):
             self.calc_rewards(user_allocate_list, user_len, server_allocate_mat, server_len,
                               server_input_seq[:, :, 3:].clone(), batch_size, tmp_server_capacity)
 
-        return -(user_allocated_props + self.capacity_reward_rate * capacity_used_props), action_probs, \
+        return -self.get_reward(user_allocated_props, server_used_props, capacity_used_props), action_probs, \
             action_idx, user_allocated_props, server_used_props, capacity_used_props, user_allocate_list
 
     def beam_forward(self, user_input_seq, server_input_seq, masks):
@@ -379,8 +379,11 @@ class AttentionNet(nn.Module):
         best_idxs = torch.gather(action_idxes, dim=1, index=indices)
         best_user_allocate_lists = torch.gather(user_allocate_lists, dim=1, index=indices)
 
-        return -(max_user_allo + self.capacity_reward_rate * max_capacity_use), \
+        return -self.get_reward(max_user_allo, max_server_use, max_capacity_use), \
             action_probs_list, best_idxs, max_user_allo, max_server_use, max_capacity_use, best_user_allocate_lists
+
+    def get_reward(self, user_allocated_props, server_used_props, capacity_used_props):
+        return user_allocated_props + self.capacity_reward_rate * capacity_used_props
 
 
 def can_allocate(workload: torch.Tensor, capacity: torch.Tensor):
