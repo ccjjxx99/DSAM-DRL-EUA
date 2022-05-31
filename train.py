@@ -63,7 +63,7 @@ def train(config):
                + "_user_" + str(data_config['user_num']) \
                + "_miu_" + str(data_config['miu']) + "_sigma_" + str(data_config['sigma']) \
                + "_" + model_config['user_embedding_type'] + "_" + model_config['server_embedding_type'] \
-               + "_" + now_train_type + "_capa_rate_" + str(model_config['capacity_reward_rate'])
+               + "_" + original_train_type + "_capa_rate_" + str(model_config['capacity_reward_rate'])
     dir_name = os.path.join(train_config['dir_name'], dir_name)
     log_file_name = dir_name + '/log.log'
 

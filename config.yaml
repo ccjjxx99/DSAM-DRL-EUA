@@ -4,7 +4,7 @@ train:
   lr: 3.0e-4
   beta: 0.9
   epochs: 1000
-  train_type: 'RGRB'
+  train_type: 'REINFORCE+RGRB'
   wait_best_reward_epoch: 10
   save_model_epoch_interval: 5
   dir_name: 'D:/transformer_eua'
@@ -18,9 +18,9 @@ data:
   miu: 35
   sigma: 10
   data_size:
-    train: 100000
-    valid: 10000
-    test: 10000
+    train: 100
+    valid: 100
+    test: 100
 model:
   exploration_c: 10
   user_scale_alpha : 0.05
