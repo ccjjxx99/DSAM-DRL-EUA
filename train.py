@@ -88,6 +88,8 @@ def train(config):
             reward, actions_probs, _, user_allocated_props, server_used_props, capacity_used_props, _ \
                 = model(user_seq, server_seq, masks)
 
+            tensorboard_writer.add_scalar('train/train_batch_reward', -torch.mean(reward), epoch)
+
             if now_train_type == 'REINFORCE':
                 if batch_idx == 0:
                     critic_exp_mvg_avg = reward.mean()
