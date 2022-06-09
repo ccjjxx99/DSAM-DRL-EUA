@@ -77,6 +77,7 @@ def train(config):
     all_valid_server_list = []
     all_valid_capacity_list = []
     best_r = 0
+    total_batch_num = 0
     for epoch in range(start_epoch, train_config['epochs']):
         # Train
         model.train()
@@ -88,7 +89,8 @@ def train(config):
             reward, actions_probs, _, user_allocated_props, server_used_props, capacity_used_props, _ \
                 = model(user_seq, server_seq, masks)
 
-            tensorboard_writer.add_scalar('train/train_batch_reward', -torch.mean(reward), epoch)
+            tensorboard_writer.add_scalar('train/train_batch_reward', -torch.mean(reward), total_batch_num)
+            total_batch_num += 1
 
             if now_train_type == 'REINFORCE':
                 if batch_idx == 0:
