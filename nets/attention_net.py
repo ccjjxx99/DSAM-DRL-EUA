@@ -383,7 +383,7 @@ class AttentionNet(nn.Module):
             action_probs_list, best_idxs, max_user_allo, max_server_use, max_capacity_use, best_user_allocate_lists
 
     def get_reward(self, user_allocated_props, server_used_props, capacity_used_props):
-        return user_allocated_props + self.capacity_reward_rate * capacity_used_props
+        return (1 - self.capacity_reward_rate) * user_allocated_props + self.capacity_reward_rate * capacity_used_props
 
 
 def can_allocate(workload: torch.Tensor, capacity: torch.Tensor):
