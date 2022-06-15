@@ -7,7 +7,7 @@ from nets.graph_encoder import GraphAttentionEncoder
 
 class UserEncoder(nn.Module):
     def __init__(self, input_dim, hidden_dim, n_heads=8, n_layers=6,
-                 normalization='batch', feed_forward_hidden=512, embedding_type='linear'):
+                 normalization='batch', feed_forward_hidden=512, embedding_type='transformer'):
         super(UserEncoder, self).__init__()
         self.embedding_type = embedding_type
         if embedding_type == 'transformer':
@@ -101,15 +101,21 @@ class Attention(nn.Module):
 
 class AttentionNet(nn.Module):
     def __init__(self, user_input_dim, server_input_dim, hidden_dim, device, capacity_reward_rate, exploration_c=10,
-                 policy='sample', user_embedding_type='linear', server_embedding_type='linear', user_scale_alpha=0.05,
-                 beam_num=1):
+                 policy='sample', user_embedding_type='transformer', server_embedding_type='linear',
+                 transformer_n_heads=8, transformer_n_layers=3, transformer_feed_forward_hidden=512,
+                 user_scale_alpha=0.05, beam_num=1, ):
         super(AttentionNet, self).__init__()
         # decoder hidden size
         self.hidden_dim = hidden_dim
         self.device = device
 
-        self.user_encoder = UserEncoder(user_input_dim, hidden_dim,embedding_type=user_embedding_type).to(device)
-        self.server_encoder = ServerEncoder(server_input_dim + 1, hidden_dim,
+        self.user_encoder = UserEncoder(user_input_dim, hidden_dim, n_heads=transformer_n_heads,
+                                        n_layers=transformer_n_layers,
+                                        feed_forward_hidden=transformer_feed_forward_hidden,
+                                        embedding_type=user_embedding_type).to(device)
+        self.server_encoder = ServerEncoder(server_input_dim + 1, hidden_dim, n_heads=transformer_n_heads,
+                                            n_layers=transformer_n_layers,
+                                            feed_forward_hidden=transformer_feed_forward_hidden,
                                             embedding_type=server_embedding_type).to(device)
 
         # glimpse输入（用户，上次选择的服务器），维度为2*dim， 跟所有的服务器作相似度并输出融合后的服务器
@@ -232,7 +238,7 @@ class AttentionNet(nn.Module):
             self.calc_rewards(user_allocate_list, user_len, server_allocate_mat, server_len,
                               server_input_seq[:, :, 3:].clone(), batch_size, tmp_server_capacity)
 
-        return -self.get_reward(user_allocated_props, server_used_props, capacity_used_props), action_probs, \
+        return -self.get_reward(user_allocated_props, capacity_used_props), action_probs, \
             action_idx, user_allocated_props, server_used_props, capacity_used_props, user_allocate_list
 
     def beam_forward(self, user_input_seq, server_input_seq, masks):
@@ -379,10 +385,10 @@ class AttentionNet(nn.Module):
         best_idxs = torch.gather(action_idxes, dim=1, index=indices)
         best_user_allocate_lists = torch.gather(user_allocate_lists, dim=1, index=indices)
 
-        return -self.get_reward(max_user_allo, max_server_use, max_capacity_use), \
+        return -self.get_reward(max_user_allo, max_capacity_use), \
             action_probs_list, best_idxs, max_user_allo, max_server_use, max_capacity_use, best_user_allocate_lists
 
-    def get_reward(self, user_allocated_props, server_used_props, capacity_used_props):
+    def get_reward(self, user_allocated_props, capacity_used_props):
         return (1 - self.capacity_reward_rate) * user_allocated_props + self.capacity_reward_rate * capacity_used_props
 
 

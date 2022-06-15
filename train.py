@@ -24,10 +24,14 @@ def train(config):
     valid_loader = DataLoader(dataset=dataset['valid'], batch_size=train_config['batch_size'], shuffle=False)
     test_loader = DataLoader(dataset=dataset['test'], batch_size=train_config['batch_size'], shuffle=False)
 
-    model = AttentionNet(6, 7, 256, device=device, exploration_c=model_config['exploration_c'],
+    model = AttentionNet(6, 7, hidden_dim=model_config['hidden_dim'], device=device,
+                         exploration_c=model_config['exploration_c'],
                          capacity_reward_rate=model_config['capacity_reward_rate'],
                          user_embedding_type=model_config['user_embedding_type'],
                          server_embedding_type=model_config['server_embedding_type'],
+                         transformer_n_heads=model_config['transformer_n_heads'],
+                         transformer_n_layers=model_config['transformer_n_layers'],
+                         transformer_feed_forward_hidden=model_config['transformer_feed_forward_hidden'],
                          user_scale_alpha=model_config['user_scale_alpha'])
     optimizer = Adam(model.parameters(), lr=train_config['lr'])
     original_train_type = train_config['train_type']

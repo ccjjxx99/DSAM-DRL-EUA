@@ -22,9 +22,13 @@ data:
     valid: 10000
     test: 10000
 model:
+  hidden_dim: 256
+  transformer_n_heads: 8
+  transformer_n_layers: 3
+  transformer_feed_forward_hidden: 512
   exploration_c: 10
   user_scale_alpha : 0.0625
-  capacity_reward_rate: 1
+  capacity_reward_rate: 0.5
   user_embedding_type: 'transformer'
   server_embedding_type: 'linear'
   need_continue: False
