@@ -50,6 +50,8 @@ def train(config):
         checkpoint = torch.load(model_config['continue_model_filename'], map_location='cpu')
         model.load_state_dict(checkpoint['model'])
         optimizer.load_state_dict(checkpoint['optimizer'])
+        for p in optimizer.param_groups:
+            p['lr'] = train_config['lr']
         start_epoch = checkpoint['epoch'] + 1
 
         if now_train_type == 'ac':
