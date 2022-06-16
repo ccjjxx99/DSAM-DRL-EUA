@@ -2,6 +2,7 @@ train:
   batch_size: 512
   use_cuda: True
   lr: 1.0e-4
+  lr_decay: 0.96
   beta: 0.9
   epochs: 1000
   train_type: 'RGRB'

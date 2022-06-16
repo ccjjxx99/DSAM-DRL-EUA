@@ -2,6 +2,7 @@ import os
 import time
 import torch
 from torch.optim import Adam
+from torch.optim.lr_scheduler import ExponentialLR
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 import torch.nn.functional as F
@@ -41,6 +42,7 @@ def train(config):
         now_train_type = original_train_type
     critic_model = None
     critic_optimizer = None
+    critic_lr_scheduler = None
     if now_train_type == 'ac':
         critic_model = CriticNet(6, 7, 256, device, model['user_embedding_type'], model['server_embedding_type'])
         critic_optimizer = Adam(critic_model.parameters(), lr=train_config['lr'])
@@ -50,8 +52,6 @@ def train(config):
         checkpoint = torch.load(model_config['continue_model_filename'], map_location='cpu')
         model.load_state_dict(checkpoint['model'])
         optimizer.load_state_dict(checkpoint['optimizer'])
-        for p in optimizer.param_groups:
-            p['lr'] = train_config['lr']
         start_epoch = checkpoint['epoch'] + 1
 
         if now_train_type == 'ac':
@@ -61,6 +61,11 @@ def train(config):
         print("成功导入预训练模型")
     else:
         start_epoch = 0
+
+    # 每轮乘lr_decay
+    lr_scheduler = ExponentialLR(optimizer, train_config['lr_decay'], last_epoch=start_epoch - 1)
+    if now_train_type == 'ac':
+        critic_lr_scheduler = ExponentialLR(critic_optimizer, train_config['lr_decay'], last_epoch=start_epoch - 1)
 
     critic_exp_mvg_avg = torch.zeros(1, device=device)
 
@@ -295,6 +300,11 @@ def train(config):
 
             # 保存一次可继续训练的模型就退出
             now_exit = True
+
+        lr_scheduler.step()
+        if now_train_type == 'ac':
+            critic_lr_scheduler.step()
+        logger.info("学习率调整为：", optimizer.state_dict()['param_groups'][0]['lr'])
 
         # 每interval个epoch，或者即将退出的时候，保存一次可继续训练的模型：
         if epoch % train_config['save_model_epoch_interval'] == train_config['save_model_epoch_interval'] - 1 \
