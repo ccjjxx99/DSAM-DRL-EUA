@@ -88,6 +88,7 @@ def train(config):
     all_valid_server_list = []
     all_valid_capacity_list = []
     best_r = 0
+    best_epoch_id = 0
     total_batch_num = 0
     for epoch in range(start_epoch, train_config['epochs']):
         # Train
@@ -224,14 +225,14 @@ def train(config):
             # 每次遇到更好的reward就保存一次模型
             if valid_r < best_r:
                 best_r = valid_r
-                best_user = valid_user_allo
-                best_server = valid_server_use
-                best_capacity = valid_capacity_use
+                best_epoch_id = epoch
                 best_time = 0
                 logger.info("目前本次reward最好\n")
                 model_filename = dir_name + "/" + time.strftime(
                     '%m%d%H%M', time.localtime(time.time())
-                ) + "_{:.2f}_{:.2f}_{:.2f}".format(best_user * 100, best_server * 100, best_capacity * 100) + '.mdl'
+                ) + "_{:.2f}_{:.2f}_{:.2f}".format(all_valid_user_list[best_epoch_id] * 100,
+                                                   all_valid_server_list[best_epoch_id] * 100,
+                                                   all_valid_capacity_list[best_epoch_id] * 100) + '.mdl'
                 torch.save(model.state_dict(), model_filename)
                 logger.info("模型已存储到: {}".format(model_filename))
             else:
@@ -289,18 +290,10 @@ def train(config):
 
         # 如果超过设定的epoch次数valid奖励都没有再提升，就停止训练
         if best_time >= train_config['wait_best_reward_epoch']:
-            logger.info("效果如下：")
-            for i in range(len(all_valid_reward_list)):
-                logger.info("Epoch: {}\treward: {:.6f}\tuser_props: {:.6f}"
-                            "\tserver_props: {:.6f}\tcapacity_props: {:.6f}"
-                            .format(i, -all_valid_reward_list[i], all_valid_user_list[i],
-                                    all_valid_server_list[i], all_valid_capacity_list[i]))
-            logger.info("训练结束，最好的reward:{}，用户分配率:{:.2f}，服务器租用率:{:.2f}，资源利用率:{:.2f}"
-                        .format(-best_r, best_user * 100, best_server * 100, best_capacity * 100))
-
             # 保存一次可继续训练的模型就退出
             now_exit = True
 
+        # 学习率衰减
         lr_scheduler.step()
         if now_train_type == 'ac':
             critic_lr_scheduler.step()
@@ -331,9 +324,22 @@ def train(config):
                         now_exit = False
                         best_time = 0
                     else:
-                        return model_filename
+                        break
                 else:
-                    return model_filename
+                    break
+
+    logger.info("效果如下：")
+    for i in range(len(all_valid_reward_list)):
+        logger.info("Epoch: {}\treward: {:.6f}\tuser_props: {:.6f}"
+                    "\tserver_props: {:.6f}\tcapacity_props: {:.6f}"
+                    .format(i, -all_valid_reward_list[i], all_valid_user_list[i],
+                            all_valid_server_list[i], all_valid_capacity_list[i]))
+    logger.info("训练结束，第{}个epoch效果最好，最好的reward:{}，用户分配率:{:.2f}，服务器租用率:{:.2f}，资源利用率:{:.2f}"
+                .format(best_epoch_id, -best_r,
+                        all_valid_user_list[best_epoch_id] * 100,
+                        all_valid_server_list[best_epoch_id] * 100,
+                        all_valid_capacity_list[best_epoch_id] * 100))
+    logger.info("模型已存储到: {}".format(model_filename))
 
 
 if __name__ == '__main__':

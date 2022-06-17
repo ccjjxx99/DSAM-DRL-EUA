@@ -4,7 +4,7 @@ train:
   lr: 1.0e-4
   lr_decay: 0.96
   beta: 0.9
-  epochs: 1000
+  epochs: 100
   train_type: 'RGRB'
   wait_best_reward_epoch: 10
   save_model_epoch_interval: 5
