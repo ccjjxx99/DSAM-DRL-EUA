@@ -297,7 +297,7 @@ def train(config):
         lr_scheduler.step()
         if now_train_type == 'ac':
             critic_lr_scheduler.step()
-        logger.info("学习率调整为：", optimizer.state_dict()['param_groups'][0]['lr'])
+        logger.info("学习率调整为：{}".format(optimizer.state_dict()['param_groups'][0]['lr']))
 
         # 每interval个epoch，或者即将退出的时候，保存一次可继续训练的模型：
         if epoch % train_config['save_model_epoch_interval'] == train_config['save_model_epoch_interval'] - 1 \
