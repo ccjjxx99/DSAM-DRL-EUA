@@ -47,11 +47,14 @@ def train(config):
         critic_model = CriticNet(6, 7, 256, device, model['user_embedding_type'], model['server_embedding_type'])
         critic_optimizer = Adam(critic_model.parameters(), lr=train_config['lr'])
 
-    # 加载需要继续训练的模型
+    # 加载需要继续训练或微调的模型
     if model_config['need_continue']:
         checkpoint = torch.load(model_config['continue_model_filename'], map_location='cpu')
         model.load_state_dict(checkpoint['model'])
         optimizer.load_state_dict(checkpoint['optimizer'])
+        if model_config['continue_lr'] != 0:
+            for param_group in optimizer.param_groups:
+                param_group['lr'] = model_config['continue_lr']
         start_epoch = checkpoint['epoch'] + 1
 
         if now_train_type == 'ac':
@@ -64,6 +67,7 @@ def train(config):
 
     # 每轮乘lr_decay
     lr_scheduler = ExponentialLR(optimizer, train_config['lr_decay'], last_epoch=start_epoch - 1)
+    print("当前学习率：", lr_scheduler.get_last_lr())
     if now_train_type == 'ac':
         critic_lr_scheduler = ExponentialLR(critic_optimizer, train_config['lr_decay'], last_epoch=start_epoch - 1)
 
@@ -230,9 +234,9 @@ def train(config):
                 logger.info("目前本次reward最好\n")
                 model_filename = dir_name + "/" + time.strftime(
                     '%m%d%H%M', time.localtime(time.time())
-                ) + "_{:.2f}_{:.2f}_{:.2f}".format(all_valid_user_list[best_epoch_id] * 100,
-                                                   all_valid_server_list[best_epoch_id] * 100,
-                                                   all_valid_capacity_list[best_epoch_id] * 100) + '.mdl'
+                ) + "_{:.2f}_{:.2f}_{:.2f}".format(all_valid_user_list[best_epoch_id - start_epoch] * 100,
+                                                   all_valid_server_list[best_epoch_id - start_epoch] * 100,
+                                                   all_valid_capacity_list[best_epoch_id - start_epoch] * 100) + '.mdl'
                 torch.save(model.state_dict(), model_filename)
                 logger.info("模型已存储到: {}".format(model_filename))
             else:
@@ -332,13 +336,13 @@ def train(config):
     for i in range(len(all_valid_reward_list)):
         logger.info("Epoch: {}\treward: {:.6f}\tuser_props: {:.6f}"
                     "\tserver_props: {:.6f}\tcapacity_props: {:.6f}"
-                    .format(i, -all_valid_reward_list[i], all_valid_user_list[i],
+                    .format(i + start_epoch, -all_valid_reward_list[i], all_valid_user_list[i],
                             all_valid_server_list[i], all_valid_capacity_list[i]))
     logger.info("训练结束，第{}个epoch效果最好，最好的reward:{}，用户分配率:{:.2f}，服务器租用率:{:.2f}，资源利用率:{:.2f}"
                 .format(best_epoch_id, -best_r,
-                        all_valid_user_list[best_epoch_id] * 100,
-                        all_valid_server_list[best_epoch_id] * 100,
-                        all_valid_capacity_list[best_epoch_id] * 100))
+                        all_valid_user_list[best_epoch_id - start_epoch] * 100,
+                        all_valid_server_list[best_epoch_id - start_epoch] * 100,
+                        all_valid_capacity_list[best_epoch_id - start_epoch] * 100))
     logger.info("模型已存储到: {}".format(model_filename))
 
 

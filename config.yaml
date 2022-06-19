@@ -33,4 +33,5 @@ model:
   user_embedding_type: 'transformer'
   server_embedding_type: 'linear'
   need_continue: False
+  continue_lr: 0
   continue_model_filename: ''
