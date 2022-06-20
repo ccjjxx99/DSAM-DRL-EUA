@@ -36,16 +36,27 @@ def train(config):
                          user_scale_alpha=model_config['user_scale_alpha'])
     optimizer = Adam(model.parameters(), lr=train_config['lr'])
     original_train_type = train_config['train_type']
-    if original_train_type == 'REINFORCE+RGRB':
+    if original_train_type == 'RGRB-BL':
         now_train_type = 'REINFORCE'
     else:
         now_train_type = original_train_type
     critic_model = None
     critic_optimizer = None
     critic_lr_scheduler = None
+    model_bl = None
     if now_train_type == 'ac':
         critic_model = CriticNet(6, 7, 256, device, model['user_embedding_type'], model['server_embedding_type'])
         critic_optimizer = Adam(critic_model.parameters(), lr=train_config['lr'])
+    elif original_train_type == 'RGRB-BL':
+        model_bl = AttentionNet(6, 7, hidden_dim=model_config['hidden_dim'], device=device,
+                                exploration_c=model_config['exploration_c'],
+                                capacity_reward_rate=model_config['capacity_reward_rate'],
+                                user_embedding_type=model_config['user_embedding_type'],
+                                server_embedding_type=model_config['server_embedding_type'],
+                                transformer_n_heads=model_config['transformer_n_heads'],
+                                transformer_n_layers=model_config['transformer_n_layers'],
+                                transformer_feed_forward_hidden=model_config['transformer_feed_forward_hidden'],
+                                user_scale_alpha=model_config['user_scale_alpha'])
 
     # 加载需要继续训练或微调的模型
     if model_config['need_continue']:
@@ -60,6 +71,9 @@ def train(config):
         if now_train_type == 'ac':
             critic_model.load_state_dict(checkpoint['critic_model'])
             critic_optimizer.load_state_dict(checkpoint['critic_optimizer'])
+        elif original_train_type == 'RGRB-BL':
+            now_train_type = 'RGRB-BL'
+            model_bl.load_state_dict(checkpoint['model_bl'])
 
         print("成功导入预训练模型")
     else:
@@ -131,6 +145,11 @@ def train(config):
                     reward2, _, _, _, _, _, _ = model(user_seq, server_seq, masks)
                     advantage = reward - reward2
                 model.policy = 'sample'
+
+            elif now_train_type == 'RGRB-BL':
+                with torch.no_grad():
+                    reward2, _, _, _, _, _, _ = model_bl(user_seq, server_seq, masks)
+                    advantage = reward - reward2
 
             else:
                 raise NotImplementedError
@@ -226,7 +245,7 @@ def train(config):
             all_valid_server_list.append(valid_server_use)
             all_valid_capacity_list.append(valid_capacity_use)
 
-            # 每次遇到更好的reward就保存一次模型
+            # 每次遇到更好的reward就保存一次模型，并且更新model_bl
             if valid_r < best_r:
                 best_r = valid_r
                 best_epoch_id = epoch
@@ -239,6 +258,10 @@ def train(config):
                                                    all_valid_capacity_list[best_epoch_id - start_epoch] * 100) + '.mdl'
                 torch.save(model.state_dict(), model_filename)
                 logger.info("模型已存储到: {}".format(model_filename))
+                # 从文件复制回来，保证是深拷贝
+                state_checkpoint = torch.load(model_filename, map_location='cpu')
+                model_bl.load_state_dict(state_checkpoint)
+                logger.info("baseline已更新")
             else:
                 best_time += 1
                 logger.info("已经有{}轮效果没变好了\n".format(best_time))
@@ -292,8 +315,9 @@ def train(config):
 
         logger.info('')
 
-        # 如果超过设定的epoch次数valid奖励都没有再提升，就停止训练
-        if best_time >= train_config['wait_best_reward_epoch']:
+        # 如果超过设定的epoch次数valid奖励都没有再提升，就停止训练；或者如果是RGRB-BL，就切换训练方式
+        if best_time >= train_config['wait_best_reward_epoch'] or \
+                (original_train_type == 'RGRB-BL' and now_train_type == 'REINFORCE'):
             # 保存一次可继续训练的模型就退出
             now_exit = True
 
@@ -315,16 +339,19 @@ def train(config):
                 state = {'model': model.state_dict(), 'optimizer': optimizer.state_dict(), 'epoch': epoch,
                          'critic_model': critic_model.state_dict(),
                          'critic_optimizer': critic_optimizer.state_dict()}
+            elif now_train_type == 'RGRB-BL':
+                state = {'model': model.state_dict(), 'optimizer': optimizer.state_dict(), 'epoch': epoch,
+                         'model_bl': model_bl.state_dict()}
             else:
                 state = {'model': model.state_dict(), 'optimizer': optimizer.state_dict(), 'epoch': epoch}
             torch.save(state, model_filename)
             logger.info("模型已存储到: {}".format(model_filename))
 
             if now_exit:
-                if original_train_type == 'REINFORCE+RGRB':
+                if original_train_type == 'RGRB-BL':
                     if now_train_type == 'REINFORCE':
-                        now_train_type = 'RGRB'
-                        logger.info("REINFORCE无进步，已切换训练方式为RGRB")
+                        now_train_type = 'RGRB-BL'
+                        logger.info("REINFORCE已训练一轮，切换训练方式为RGRB-BL")
                         now_exit = False
                         best_time = 0
                     else:
