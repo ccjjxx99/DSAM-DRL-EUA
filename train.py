@@ -258,10 +258,11 @@ def train(config):
                                                    all_valid_capacity_list[best_epoch_id - start_epoch] * 100) + '.mdl'
                 torch.save(model.state_dict(), model_filename)
                 logger.info("模型已存储到: {}".format(model_filename))
-                # 从文件复制回来，保证是深拷贝
-                state_checkpoint = torch.load(model_filename, map_location='cpu')
-                model_bl.load_state_dict(state_checkpoint)
-                logger.info("baseline已更新")
+                if original_train_type == "RGRB-BL":
+                    # 从文件复制回来，保证是深拷贝
+                    state_checkpoint = torch.load(model_filename, map_location='cpu')
+                    model_bl.load_state_dict(state_checkpoint)
+                    logger.info("baseline已更新")
             else:
                 best_time += 1
                 logger.info("已经有{}轮效果没变好了\n".format(best_time))
