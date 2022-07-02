@@ -139,7 +139,7 @@ def train(config):
                 critic_loss.backward()
                 critic_optimizer.step()
 
-            elif now_train_type == 'RGRB':
+            elif now_train_type == 'SCST':
                 model.policy = 'greedy'
                 with torch.no_grad():
                     reward2, _, _, _, _, _, _ = model(user_seq, server_seq, masks)
