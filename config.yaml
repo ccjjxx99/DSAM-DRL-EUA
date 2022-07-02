@@ -1,14 +1,15 @@
 train:
-  batch_size: 512
+  batch_size: 100
   use_cuda: True
   lr: 1.0e-4
   lr_decay: 0.96
   beta: 0.9
+  max_grad_norm: 2.
   epochs: 100
-  train_type: 'RGRB-BL'
-  wait_best_reward_epoch: 10
+  train_type: 'RGRB'
+  wait_best_reward_epoch: 30
   save_model_epoch_interval: 5
-  dir_name: 'D:/am_drl_eua'
+  dir_name: '"D:\DSAM_DRL_EUA"'
   device: 'cuda:0'
 data:
   user_num: 500
@@ -19,9 +20,9 @@ data:
   miu: 35
   sigma: 10
   data_size:
-    train: 10
-    valid: 10
-    test: 10
+    train: 100000
+    valid: 10000
+    test: 10000
 model:
   hidden_dim: 256
   transformer_n_heads: 8
