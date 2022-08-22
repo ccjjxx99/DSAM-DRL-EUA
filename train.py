@@ -16,8 +16,8 @@ from data.eua_dataset import get_dataset
 def train(config):
     seed_torch()
     train_config, data_config, model_config = config['train'], config['data'], config['model']
-    assert torch.cuda.is_available(), 'cuda无法使用'
-    device = train_config['device']
+    device = train_config['device'] if torch.cuda.is_available() else 'cpu'
+    print('Using device: {}'.format(device))
     dataset = get_dataset(data_config['x_end'], data_config['y_end'], data_config['miu'], data_config['sigma'],
                           data_config['user_num'], data_config['data_size'],
                           data_config['min_cov'], data_config['max_cov'], device, train_config['dir_name'])

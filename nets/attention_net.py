@@ -16,16 +16,14 @@ class UserEncoder(nn.Module):
         elif embedding_type == 'linear':
             self.embedding = nn.Linear(input_dim, hidden_dim)
         elif embedding_type == 'lstm':
-            self.embedding = nn.LSTM(input_size=input_dim, hidden_size=hidden_dim,
-                                     batch_first=True)
+            self.embedding = nn.LSTM(input_size=input_dim, hidden_size=hidden_dim, batch_first=True)
         else:
             raise NotImplementedError
 
     def forward(self, inputs):
-        if self.embedding == 'lstm':
-            flipped = torch.flip(inputs, dims=[1])
-            embedded, _ = self.embedding(flipped)
-            return torch.flip(embedded, dims=[1])
+        if self.embedding_type == 'lstm':
+            embedded, _ = self.embedding(inputs)
+            return embedded
         else:
             return self.embedding(inputs)
 

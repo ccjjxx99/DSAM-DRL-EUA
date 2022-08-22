@@ -80,7 +80,7 @@ def calc_method_reward_by_test_set(test_set, method):
         server_props.append(server_used_prop)
         capacity_props.append(capacity_prop)
 
-    return mean(user_props), mean(server_props), mean(capacity_props)
+    return mean(user_props), mean(server_props), mean(capacity_props), user_props, server_props, capacity_props
 
 
 def test_by_model_and_set(model, batch_size, test_set, device):
