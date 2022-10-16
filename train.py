@@ -128,7 +128,7 @@ def train(config):
                 else:
                     critic_exp_mvg_avg = (critic_exp_mvg_avg * train_config['beta']) \
                                          + ((1. - train_config['beta']) * reward.mean())
-                advantage = reward - critic_exp_mvg_avg
+                advantage = reward - critic_exp_mvg_avg.detach()
 
             elif now_train_type == 'ac':
                 critic_reward = critic_model(user_seq, server_seq)
@@ -166,8 +166,6 @@ def train(config):
             optimizer.zero_grad()
             actor_loss.backward()
             optimizer.step()
-
-            critic_exp_mvg_avg = critic_exp_mvg_avg.detach()
 
             if batch_idx % int(1024 / train_config['batch_size']) == 0:
                 logger.info(
