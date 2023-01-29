@@ -183,11 +183,17 @@ class AttentionNet(nn.Module):
 
         # 已使用的服务器的资源利用率
         server_allocated_flag = server_allocate_mat[:, :-1].unsqueeze(-1).expand(batch_size, server_len, 4)
+        # (batch_size, server_len, 4)
         used_original_server = original_servers_capacity.masked_fill(~server_allocated_flag.bool(), value=0)
+        # (batch_size, server_len, 4)
         servers_remain_capacity = tmp_server_capacity.masked_fill(~server_allocated_flag.bool(), value=0)
-        sum_all_capacity = torch.sum(used_original_server, dim=(1, 2))
-        sum_remain_capacity = torch.sum(servers_remain_capacity, dim=(1, 2))
-        capacity_used_props = 1 - sum_remain_capacity / sum_all_capacity
+        # 对于每个维度的资源求和，得到的结果应该是(batch_size, 4)，被压缩的维度是1
+        sum_all_capacity = torch.sum(used_original_server, dim=1)
+        sum_remain_capacity = torch.sum(servers_remain_capacity, dim=1)
+        # 对于每个维度的资源求资源利用率
+        every_capacity_remain_props = torch.div(sum_remain_capacity, sum_all_capacity)
+        mean_capacity_remain_props = torch.mean(every_capacity_remain_props, dim=1)
+        capacity_used_props = 1 - mean_capacity_remain_props
         return user_allocated_props, server_used_props, capacity_used_props
 
     def forward(self, user_input_seq, server_input_seq, masks):
