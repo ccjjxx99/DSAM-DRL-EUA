@@ -96,9 +96,12 @@ def mcf_allocate(original_servers, original_users, original_masks):
     original_servers_capacity = used_original_server[:, 3:]
     servers_remain = servers[server_allocate_mat]
     servers_remain_capacity = servers_remain[:, 3:]
-    sum_all_capacity = original_servers_capacity.sum()
-    sum_remain_capacity = servers_remain_capacity.sum()
-    capacity_used_prop = 1 - sum_remain_capacity / sum_all_capacity
+    sum_all_capacity = np.sum(original_servers_capacity, axis=0)
+    sum_remain_capacity = np.sum(servers_remain_capacity, axis=0)
+    # 对于每个维度的资源求资源利用率
+    every_capacity_remain_props = np.divide(sum_remain_capacity, sum_all_capacity)
+    mean_capacity_remain_props = np.mean(every_capacity_remain_props, axis=0)
+    capacity_used_prop = 1 - mean_capacity_remain_props
 
     return users, fake_allocate_list, user_allocate_list, server_allocate_num, \
         user_allocated_prop, server_used_prop, capacity_used_prop

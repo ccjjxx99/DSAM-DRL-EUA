@@ -62,9 +62,12 @@ def random_allocate(servers, users, user_masks):
     used_original_server = servers[server_allocate_mat]
     original_servers_capacity = used_original_server[:, 3:]
     servers_remain_capacity = tmp_server_capacity[server_allocate_mat]
-    sum_all_capacity = original_servers_capacity.sum()
-    sum_remain_capacity = servers_remain_capacity.sum()
-    capacity_used_prop = 1 - sum_remain_capacity / sum_all_capacity
+    sum_all_capacity = np.sum(original_servers_capacity, axis=0)
+    sum_remain_capacity = np.sum(servers_remain_capacity, axis=0)
+    # 对于每个维度的资源求资源利用率
+    every_capacity_remain_props = np.divide(sum_remain_capacity, sum_all_capacity)
+    mean_capacity_remain_props = np.mean(every_capacity_remain_props, axis=0)
+    capacity_used_prop = 1 - mean_capacity_remain_props
 
     return None, None, user_allocate_list, server_allocate_num, \
         user_allocated_prop, server_used_prop, capacity_used_prop
