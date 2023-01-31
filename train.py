@@ -101,6 +101,7 @@ def train(config):
     logger = get_logger(log_file_name)
     now_exit = False
 
+    start_time = time.time()
     all_valid_reward_list = []
     all_valid_user_list = []
     all_valid_server_list = []
@@ -364,11 +365,13 @@ def train(config):
                     "\tserver_props: {:.6f}\tcapacity_props: {:.6f}"
                     .format(i + start_epoch, -all_valid_reward_list[i], all_valid_user_list[i],
                             all_valid_server_list[i], all_valid_capacity_list[i]))
-    logger.info("训练结束，第{}个epoch效果最好，最好的reward:{}，用户分配率:{:.2f}，服务器租用率:{:.2f}，资源利用率:{:.2f}"
+    logger.info("训练结束，第{}个epoch效果最好，最好的reward: {} ，用户分配率: {:.2f} ，服务器租用率: {:.2f} ，资源利用率: {:.2f}"
                 .format(best_epoch_id, -best_r,
                         all_valid_user_list[best_epoch_id - start_epoch] * 100,
                         all_valid_server_list[best_epoch_id - start_epoch] * 100,
                         all_valid_capacity_list[best_epoch_id - start_epoch] * 100))
+    end_time = time.time()
+    logger.info("训练时间: {:.2f}h".format(((end_time - start_time) / 3600)))
     logger.info("模型已存储到: {}".format(model_filename))
 
 
