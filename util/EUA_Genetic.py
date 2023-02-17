@@ -52,14 +52,14 @@ def genetic_allocate(servers, users, user_masks):
     best_chromosomes = max(chromosomes)
     rewards.append(best_chromosomes.reward)
     generation_count = 0
-    t_bar = tqdm.tqdm(total=iter_count)  # 初始化进度条
+    # t_bar = tqdm.tqdm(total=iter_count)  # 初始化进度条
     for _ in range(iter_count):
-        t_bar.update(1)  # 更新进度
-        t_bar.set_description("{:2f} {:2f} {:2f} {:2f}".format(best_chromosomes.reward,
-                                                               best_chromosomes.user_allocated_prop,
-                                                               best_chromosomes.server_used_prop,
-                                                               best_chromosomes.capacity_used_prop))  # 更新描述
-        t_bar.refresh()  # 立即显示进度条更新结果
+        # t_bar.update(1)  # 更新进度
+        # t_bar.set_description("{:2f} {:2f} {:2f} {:2f}".format(best_chromosomes.reward,
+        #                                                        best_chromosomes.user_allocated_prop,
+        #                                                        best_chromosomes.server_used_prop,
+        #                                                        best_chromosomes.capacity_used_prop))  # 更新描述
+        # t_bar.refresh()  # 立即显示进度条更新结果
         chromosomes = generate_next_generation(chromosomes, user_within_servers, best_chromosomes)
         generation_count += 1
         for chromosome in chromosomes:
