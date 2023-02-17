@@ -69,14 +69,17 @@ def get_reward(original_servers, users, actions):
     return user_allocate_list, server_allocate_num, user_allocated_prop, server_used_prop, capacity_used_prop
 
 
-def calc_method_reward_by_test_set(test_set, method):
+def calc_method_reward_by_test_set(test_set, method, nums=0):
     servers = test_set.servers
-    users_list, users_masks_list = test_set.users_list, test_set.users_masks_list
+    if nums == 0:
+        users_list, users_masks_list = test_set.users_list, test_set.users_masks_list
+    else:
+        users_list, users_masks_list = test_set.users_list[:nums], test_set.users_masks_list[:nums]
 
     user_props = []
     server_props = []
     capacity_props = []
-    for i in trange(len(test_set)):
+    for i in range(len(users_list)):
         _, _, _, _, user_allocated_prop, server_used_prop, capacity_prop = method(servers, users_list[i],
                                                                                   users_masks_list[i])
         user_props.append(user_allocated_prop)
