@@ -69,9 +69,9 @@ def genetic_allocate(servers, users, user_masks):
         pC += (1 - 0.5) / iter_count
         pM += (1 - 0.05) / iter_count
 
-    plt.plot(rewards)
-    plt.title('reward')
-    plt.show()
+    # plt.plot(rewards)
+    # plt.title('reward')
+    # plt.show()
 
     return None, None, best_chromosomes.user_allocate_list, best_chromosomes.server_allocate_num, \
         best_chromosomes.user_allocated_prop, best_chromosomes.server_used_prop, best_chromosomes.capacity_used_prop

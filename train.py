@@ -9,7 +9,8 @@ import torch.nn.functional as F
 import yaml
 
 from nets.attention_net import AttentionNet, CriticNet
-from util.utils import seed_torch, get_logger
+from util.torch_utils import seed_torch
+from util.utils import get_logger
 from data.eua_dataset import get_dataset
 
 
